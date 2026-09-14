@@ -1,0 +1,245 @@
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useParams, Link } from 'react-router-dom'
+import { supabase } from '../../supabaseClient'
+import { useAuth } from '../../context/AuthContext'
+import Navbar from '../../components/Navbar'
+import { BLOCK_TYPES } from '../../lib/blockTypes'
+import LectureView from '../../components/blocks/LectureView'
+import ActivityView from '../../components/blocks/ActivityView'
+import InteractiveView from '../../components/blocks/InteractiveView'
+import BlockIcon from '../../components/BlockIcon'
+import { haptic } from '../../lib/haptics'
+import { celebrate } from '../../lib/confetti'
+import { ArrowLeft, ArrowRight, Loader2 } from 'lucide-react'
+
+const VIEWS = {
+  lecture: LectureView,
+  activity: ActivityView,
+  interactive: InteractiveView,
+}
+
+const BLOCK_META = Object.fromEntries(BLOCK_TYPES.map((b) => [b.type, b]))
+
+export default function ModulePlayer() {
+  const { assignmentId } = useParams()
+  const { user } = useAuth()
+  const [assignment, setAssignment] = useState(null)
+  const [blocks, setBlocks] = useState([])
+  const [progressByBlock, setProgressByBlock] = useState({}) // content_id -> row
+  const [highlightsByBlock, setHighlightsByBlock] = useState({}) // content_id -> array
+  const [current, setCurrent] = useState(0)
+  const [loading, setLoading] = useState(true)
+
+  async function loadAll() {
+    setLoading(true)
+    const { data: a } = await supabase
+      .from('module_assignments')
+      .select('id, due_date, module_id, class_id, modules ( id, title, subject, description ), classes ( name )')
+      .eq('id', assignmentId)
+      .single()
+    setAssignment(a)
+
+    if (a?.module_id) {
+      const { data: b } = await supabase
+        .from('module_content')
+        .select('*')
+        .eq('module_id', a.module_id)
+        .order('order_index', { ascending: true })
+      setBlocks(b ?? [])
+
+      const { data: p } = await supabase
+        .from('student_progress')
+        .select('*')
+        .eq('assignment_id', assignmentId)
+        .eq('student_id', user.id)
+      const map = {}
+      for (const row of p ?? []) map[row.content_id] = row
+      setProgressByBlock(map)
+
+      const { data: h } = await supabase
+        .from('lecture_highlights')
+        .select('*')
+        .eq('assignment_id', assignmentId)
+        .eq('student_id', user.id)
+        .order('start_offset', { ascending: true })
+      const hMap = {}
+      for (const row of h ?? []) {
+        if (!hMap[row.content_id]) hMap[row.content_id] = []
+        hMap[row.content_id].push(row)
+      }
+      setHighlightsByBlock(hMap)
+    }
+    setLoading(false)
+  }
+
+  useEffect(() => {
+    if (user) loadAll()
+  }, [assignmentId, user])
+
+  const totalBlocks = blocks.length
+  const completedCount = useMemo(
+    () => blocks.filter((b) => progressByBlock[b.id]?.completed).length,
+    [blocks, progressByBlock]
+  )
+  const celebratedModuleRef = useRef(false)
+
+  useEffect(() => {
+    if (totalBlocks > 0 && completedCount === totalBlocks && !celebratedModuleRef.current) {
+      celebratedModuleRef.current = true
+      celebrate({ big: true })
+    }
+  }, [completedCount, totalBlocks])
+
+  async function saveProgress(block, patch) {
+    const existing = progressByBlock[block.id]
+    const payload = {
+      content_id: block.id,
+      assignment_id: assignmentId,
+      student_id: user.id,
+      ...patch,
+    }
+    let error
+    if (existing) {
+      ;({ error } = await supabase.from('student_progress').update(patch).eq('id', existing.id))
+    } else {
+      ;({ error } = await supabase.from('student_progress').insert(payload))
+    }
+    if (!error) await loadAll()
+  }
+
+  async function addHighlight(block, { start_offset, end_offset, quote, note }) {
+    const { data, error } = await supabase
+      .from('lecture_highlights')
+      .insert({
+        content_id: block.id,
+        assignment_id: assignmentId,
+        student_id: user.id,
+        start_offset,
+        end_offset,
+        quote,
+        note,
+      })
+      .select()
+      .single()
+    if (!error) {
+      setHighlightsByBlock((prev) => ({
+        ...prev,
+        [block.id]: [...(prev[block.id] ?? []), data].sort((a, b) => a.start_offset - b.start_offset),
+      }))
+    }
+  }
+
+  async function deleteHighlight(block, highlightId) {
+    const { error } = await supabase.from('lecture_highlights').delete().eq('id', highlightId)
+    if (!error) {
+      setHighlightsByBlock((prev) => ({
+        ...prev,
+        [block.id]: (prev[block.id] ?? []).filter((h) => h.id !== highlightId),
+      }))
+    }
+  }
+
+  function handleLectureComplete(block) {
+    haptic('success')
+    saveProgress(block, { completed: true, completed_at: new Date().toISOString() })
+  }
+
+  function handleActivitySubmit(block, response, score, maxScore) {
+    // Celebrate every graded submission — bigger burst for a perfect score.
+    const perfect = maxScore > 0 && score === maxScore
+    celebrate({ big: perfect })
+    saveProgress(block, {
+      response,
+      score,
+      max_score: maxScore,
+      completed: true,
+      completed_at: new Date().toISOString(),
+    })
+  }
+
+  function handleInteractiveComplete(block) {
+    haptic('success')
+    saveProgress(block, { completed: true, completed_at: new Date().toISOString() })
+  }
+
+  if (loading) {
+    return (
+      <div>
+        <Navbar />
+        <main className="page"><p className="muted" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><Loader2 size={16} className="spin" /> Loading…</p></main>
+      </div>
+    )
+  }
+
+  if (!assignment) {
+    return (
+      <div>
+        <Navbar />
+        <main className="page"><p>Module not found.</p></main>
+      </div>
+    )
+  }
+
+  const block = blocks[current]
+  const View = block ? VIEWS[block.type] : null
+  const progress = block ? progressByBlock[block.id] : null
+
+  return (
+    <div>
+      <Navbar />
+      <main className="page">
+        <div className="page-header">
+          <div>
+            <h1><BlockIcon type="lecture" size={22} /> {assignment.modules?.title}</h1>
+            <p className="subtitle">{assignment.modules?.subject} — {assignment.classes?.name}</p>
+          </div>
+          <Link className="btn" to="/student/my-modules"><ArrowLeft size={15} /> Back to My Modules</Link>
+        </div>
+
+        <div className="progress-bar-track">
+          <div className="progress-bar-fill" style={{ width: totalBlocks ? `${(completedCount / totalBlocks) * 100}%` : '0%' }} />
+        </div>
+        <p className="muted small">{completedCount} / {totalBlocks} blocks complete</p>
+
+        {totalBlocks === 0 && <p className="muted">This module has no content yet.</p>}
+
+        {totalBlocks > 0 && (
+          <>
+            <div className="stepper">
+              {blocks.map((b, i) => (
+                <button
+                  key={b.id}
+                  type="button"
+                  className={`stepper-btn${i === current ? ' stepper-btn-active' : ''}${progressByBlock[b.id]?.completed ? ' stepper-btn-done' : ''}`}
+                  onClick={() => { haptic('tap'); setCurrent(i) }}
+                >
+                  <BlockIcon type={b.type} size={13} /> {i + 1}
+                </button>
+              ))}
+            </div>
+
+            <div className="module-card" style={{ marginTop: '1rem' }}>
+              <h3><BlockIcon type={block.type} size={18} /> {block.title}</h3>
+              {View && (
+                <View
+                  data={block.data}
+                  progress={progress}
+                  onComplete={() => (block.type === 'lecture' ? handleLectureComplete(block) : handleInteractiveComplete(block))}
+                  onSubmit={(response, score, maxScore) => handleActivitySubmit(block, response, score, maxScore)}
+                  highlights={block.type === 'lecture' ? (highlightsByBlock[block.id] ?? []) : []}
+                  onAddHighlight={block.type === 'lecture' ? (h) => addHighlight(block, h) : undefined}
+                  onDeleteHighlight={block.type === 'lecture' ? (id) => deleteHighlight(block, id) : undefined}
+                />
+              )}
+            </div>
+
+            <div className="row-actions" style={{ marginTop: '1rem' }}>
+              <button className="btn" disabled={current === 0} onClick={() => { haptic('tap'); setCurrent((c) => c - 1) }}><ArrowLeft size={15} /> Previous</button>
+              <button className="btn" disabled={current === blocks.length - 1} onClick={() => { haptic('tap'); setCurrent((c) => c + 1) }}>Next <ArrowRight size={15} /></button>
+            </div>
+          </>
+        )}
+      </main>
+    </div>
+  )
+}
