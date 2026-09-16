@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { AuthProvider } from './context/AuthContext'
 import PrivateRoute from './components/PrivateRoute'
+import FloatingMessageButton from './components/FloatingMessageButton'
 
 import Login from './pages/Login'
 import RoleHome from './pages/RoleHome'
@@ -103,6 +104,8 @@ export default function App() {
 
           <Route path="*" element={<RoleHome />} />
         </Routes>
+
+        <FloatingMessageButton />
       </AuthProvider>
     </BrowserRouter>
   )

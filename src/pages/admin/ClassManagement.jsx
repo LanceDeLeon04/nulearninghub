@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../supabaseClient'
 import Navbar from '../../components/Navbar'
-import { Users, Trophy } from 'lucide-react'
+import { Users, Trophy, Pencil, Trash2, X, Check } from 'lucide-react'
 import { formatUsername } from '../../lib/formatUsername'
+import { haptic } from '../../lib/haptics'
 
 export default function ClassManagement() {
   const [classes, setClasses] = useState([])
@@ -17,6 +18,9 @@ export default function ClassManagement() {
   const [message, setMessage] = useState('')
   const [expandedLeaderboard, setExpandedLeaderboard] = useState(null) // classId currently expanded
   const [leaderboardByClass, setLeaderboardByClass] = useState({}) // classId -> rows
+  const [editingClassId, setEditingClassId] = useState(null)
+  const [editName, setEditName] = useState('')
+  const [editSubject, setEditSubject] = useState('')
 
   async function toggleLeaderboard(classId) {
     if (expandedLeaderboard === classId) {
@@ -103,6 +107,45 @@ export default function ClassManagement() {
     if (!error) await loadClasses()
   }
 
+  function startEditClass(c) {
+    setEditingClassId(c.id)
+    setEditName(c.name)
+    setEditSubject(c.subject)
+  }
+
+  async function handleSaveClassEdit(classId) {
+    if (!editName.trim() || !editSubject.trim()) return
+    const { error } = await supabase
+      .from('classes')
+      .update({ name: editName.trim(), subject: editSubject.trim() })
+      .eq('id', classId)
+    if (error) {
+      setMessage(`Error updating section: ${error.message}`)
+      return
+    }
+    haptic('success')
+    setEditingClassId(null)
+    await loadClasses()
+  }
+
+  async function handleDeleteClass(c) {
+    const confirmed = window.confirm(
+      `Delete "${c.name}"? This removes the section, its roster, and any module assignments tied to it. This cannot be undone.`
+    )
+    if (!confirmed) return
+    haptic('tap')
+    const { error } = await supabase.from('classes').delete().eq('id', c.id)
+    if (error) {
+      setMessage(`Error deleting section: ${error.message}`)
+      return
+    }
+    haptic('success')
+    setMessage(`"${c.name}" was deleted.`)
+    if (expanded === c.id) setExpanded(null)
+    if (expandedLeaderboard === c.id) setExpandedLeaderboard(null)
+    await loadClasses()
+  }
+
   async function handleAddStudent(classId, studentId) {
     if (!studentId) return
     const { error } = await supabase.from('class_students').insert({ class_id: classId, student_id: studentId })
@@ -169,8 +212,12 @@ export default function ClassManagement() {
             {classes.map((c) => (
               <>
                 <tr key={c.id}>
-                  <td>{c.name}</td>
-                  <td>{c.subject}</td>
+                  <td>{editingClassId === c.id ? (
+                    <input value={editName} onChange={(e) => setEditName(e.target.value)} />
+                  ) : c.name}</td>
+                  <td>{editingClassId === c.id ? (
+                    <input value={editSubject} onChange={(e) => setEditSubject(e.target.value)} />
+                  ) : c.subject}</td>
                   <td>
                     <select
                       value={c.teacher_id}
@@ -182,12 +229,31 @@ export default function ClassManagement() {
                     </select>
                   </td>
                   <td>
-                    <button className="btn" onClick={() => toggleExpand(c.id)}>
-                      {expanded === c.id ? 'Hide Roster' : 'Manage Roster'}
-                    </button>{' '}
-                    <button className="btn" onClick={() => toggleLeaderboard(c.id)}>
-                      <Trophy size={14} /> {expandedLeaderboard === c.id ? 'Hide Leaderboard' : 'Leaderboard'}
-                    </button>
+                    {editingClassId === c.id ? (
+                      <>
+                        <button className="btn btn-approve btn-sm" onClick={() => handleSaveClassEdit(c.id)}>
+                          <Check size={13} /> Save
+                        </button>{' '}
+                        <button className="btn btn-ghost btn-sm" onClick={() => setEditingClassId(null)}>
+                          <X size={13} /> Cancel
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button className="btn btn-sm" onClick={() => startEditClass(c)}>
+                          <Pencil size={13} /> Edit
+                        </button>{' '}
+                        <button className="btn" onClick={() => toggleExpand(c.id)}>
+                          {expanded === c.id ? 'Hide Roster' : 'Manage Roster'}
+                        </button>{' '}
+                        <button className="btn" onClick={() => toggleLeaderboard(c.id)}>
+                          <Trophy size={14} /> {expandedLeaderboard === c.id ? 'Hide Leaderboard' : 'Leaderboard'}
+                        </button>{' '}
+                        <button className="btn btn-reject btn-sm" onClick={() => handleDeleteClass(c)}>
+                          <Trash2 size={13} /> Delete
+                        </button>
+                      </>
+                    )}
                   </td>
                 </tr>
                 {expandedLeaderboard === c.id && (

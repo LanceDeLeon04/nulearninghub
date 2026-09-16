@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../../supabaseClient'
 import Navbar from '../../components/Navbar'
-import { CheckSquare, Eye } from 'lucide-react'
+import { haptic } from '../../lib/haptics'
+import { CheckSquare, Eye, Pencil, Trash2, X, Check } from 'lucide-react'
 
 const STATUS_LABEL = {
   pending: 'Pending Approval',
@@ -17,12 +18,81 @@ const TABS = [
   { key: 'rejected', label: 'Rejected' },
 ]
 
+// Inline edit form for a module's basic fields — swapped in over the card's
+// normal read-only view. Content blocks (lecture/activity/etc.) are still
+// edited in the teacher's Module Builder; this covers what admin oversight
+// needs: title, subject, description, and curriculum ordering.
+function EditModuleForm({ module, onCancel, onSaved }) {
+  const [title, setTitle] = useState(module.title)
+  const [subject, setSubject] = useState(module.subject)
+  const [description, setDescription] = useState(module.description ?? '')
+  const [sequenceOrder, setSequenceOrder] = useState(module.sequence_order ?? 0)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  async function handleSave() {
+    if (!title.trim() || !subject.trim()) return
+    setSaving(true)
+    setError('')
+    const { error: updateError } = await supabase
+      .from('modules')
+      .update({
+        title: title.trim(),
+        subject: subject.trim(),
+        description: description.trim(),
+        sequence_order: Number(sequenceOrder) || 0,
+      })
+      .eq('id', module.id)
+    setSaving(false)
+    if (updateError) {
+      setError(updateError.message)
+      return
+    }
+    haptic('success')
+    onSaved()
+  }
+
+  return (
+    <div className="module-card">
+      <div className="form-grid">
+        <label>
+          Title
+          <input value={title} onChange={(e) => setTitle(e.target.value)} />
+        </label>
+        <label>
+          Subject
+          <input value={subject} onChange={(e) => setSubject(e.target.value)} />
+        </label>
+        <label>
+          Curriculum order
+          <input type="number" value={sequenceOrder} onChange={(e) => setSequenceOrder(e.target.value)} />
+        </label>
+      </div>
+      <label style={{ display: 'block', marginTop: '0.6rem' }}>
+        Description
+        <textarea rows={3} value={description} onChange={(e) => setDescription(e.target.value)} style={{ width: '100%' }} />
+      </label>
+      {error && <p className="muted small" style={{ color: 'var(--danger, #dc2626)', marginTop: '0.4rem' }}>{error}</p>}
+      <div className="row-actions" style={{ marginTop: '0.8rem' }}>
+        <button className="btn btn-approve" onClick={handleSave} disabled={saving || !title.trim() || !subject.trim()}>
+          <Check size={14} /> Save
+        </button>
+        <button className="btn btn-ghost" onClick={onCancel} disabled={saving}>
+          <X size={14} /> Cancel
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export default function ModuleApproval() {
   // Every module application, any status — this is the full record,
   // not just the pending queue. Filtering to a status happens client-side
   // so switching tabs doesn't need a re-fetch.
   const [modules, setModules] = useState([])
   const [activeTab, setActiveTab] = useState('pending')
+  const [editingId, setEditingId] = useState(null)
+  const [message, setMessage] = useState('')
 
   async function load() {
     const { data, error } = await supabase
@@ -40,6 +110,22 @@ export default function ModuleApproval() {
     if (!error) load()
   }
 
+  async function handleDelete(m) {
+    const confirmed = window.confirm(
+      `Delete "${m.title}"? This removes the module, its content, and any class assignments of it. This cannot be undone.`
+    )
+    if (!confirmed) return
+    haptic('tap')
+    const { error } = await supabase.from('modules').delete().eq('id', m.id)
+    if (error) {
+      setMessage(`Error deleting module: ${error.message}`)
+      return
+    }
+    haptic('success')
+    setMessage(`"${m.title}" was deleted.`)
+    load()
+  }
+
   const counts = useMemo(() => ({
     all: modules.length,
     pending: modules.filter((m) => m.status === 'pending').length,
@@ -55,6 +141,7 @@ export default function ModuleApproval() {
       <main className="page">
         <h1><CheckSquare size={22} /> Module Approval</h1>
         <p className="subtitle">Manage every module application — pending, approved, and rejected — from any teacher.</p>
+        {message && <div className="info-banner">{message}</div>}
 
         <div className="tab-bar">
           {TABS.map((t) => (
@@ -70,30 +157,45 @@ export default function ModuleApproval() {
         </div>
 
         <div className="card-grid">
-          {visible.map((m) => (
-            <div key={m.id} className="module-card">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem' }}>
-                <h3>{m.title}</h3>
-                <span className={`badge status-${m.status}`}>{STATUS_LABEL[m.status] ?? m.status}</span>
-              </div>
-              <p className="muted">{m.subject} — by {m.profiles?.full_name}</p>
-              <p>{m.description}</p>
-              <p className="muted small">Submitted {new Date(m.created_at).toLocaleDateString()}</p>
+          {visible.map((m) =>
+            editingId === m.id ? (
+              <EditModuleForm
+                key={m.id}
+                module={m}
+                onCancel={() => setEditingId(null)}
+                onSaved={() => { setEditingId(null); load() }}
+              />
+            ) : (
+              <div key={m.id} className="module-card">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem' }}>
+                  <h3>{m.title}</h3>
+                  <span className={`badge status-${m.status}`}>{STATUS_LABEL[m.status] ?? m.status}</span>
+                </div>
+                <p className="muted">{m.subject} — by {m.profiles?.full_name}</p>
+                <p>{m.description}</p>
+                <p className="muted small">Submitted {new Date(m.created_at).toLocaleDateString()}</p>
 
-              <div className="row-actions">
-                <Link className="btn" to={`/admin/module-preview/${m.id}`}><Eye size={14} /> View</Link>
-                {m.status !== 'approved' && (
-                  <button className="btn btn-approve" onClick={() => updateStatus(m.id, 'approved')}>Approve</button>
-                )}
-                {m.status !== 'rejected' && (
-                  <button className="btn btn-reject" onClick={() => updateStatus(m.id, 'rejected')}>Reject</button>
-                )}
-                {m.status !== 'pending' && (
-                  <button className="btn" onClick={() => updateStatus(m.id, 'pending')}>Reset to Pending</button>
-                )}
+                <div className="row-actions">
+                  <Link className="btn" to={`/admin/module-preview/${m.id}`}><Eye size={14} /> View</Link>
+                  {m.status !== 'approved' && (
+                    <button className="btn btn-approve" onClick={() => updateStatus(m.id, 'approved')}>Approve</button>
+                  )}
+                  {m.status !== 'rejected' && (
+                    <button className="btn btn-reject" onClick={() => updateStatus(m.id, 'rejected')}>Reject</button>
+                  )}
+                  {m.status !== 'pending' && (
+                    <button className="btn" onClick={() => updateStatus(m.id, 'pending')}>Reset to Pending</button>
+                  )}
+                  <button className="btn" onClick={() => setEditingId(m.id)}>
+                    <Pencil size={14} /> Edit
+                  </button>
+                  <button className="btn btn-reject" onClick={() => handleDelete(m)}>
+                    <Trash2 size={14} /> Delete
+                  </button>
+                </div>
               </div>
-            </div>
-          ))}
+            )
+          )}
           {visible.length === 0 && <p>No {activeTab === 'all' ? '' : activeTab} module applications.</p>}
         </div>
       </main>

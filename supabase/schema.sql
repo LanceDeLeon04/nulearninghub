@@ -153,6 +153,13 @@ create policy "profiles_select_all" on profiles for select using (true);
 drop policy if exists "profiles_update_self_no_role_change" on profiles;
 create policy "profiles_update_self_no_role_change" on profiles for update
   using (auth.uid() = id);
+-- Admins can also edit any profile's display name from the admin accounts
+-- page (email/password/role changes and deletion still go through the
+-- service-role "manage-user" edge function since those touch auth.users).
+drop policy if exists "profiles_update_admin_any" on profiles;
+create policy "profiles_update_admin_any" on profiles for update using (
+  current_role_name() = 'admin'
+);
 
 -- CLASSES: only admins create/own the creation of classes; teachers can read
 -- and update classes assigned to them; students can read classes they belong to.
@@ -208,6 +215,10 @@ create policy "modules_insert_teacher" on modules for insert with check (
 );
 drop policy if exists "modules_update_owner_or_admin" on modules;
 create policy "modules_update_owner_or_admin" on modules for update using (
+  teacher_id = auth.uid() or current_role_name() = 'admin'
+);
+drop policy if exists "modules_delete_owner_or_admin" on modules;
+create policy "modules_delete_owner_or_admin" on modules for delete using (
   teacher_id = auth.uid() or current_role_name() = 'admin'
 );
 
