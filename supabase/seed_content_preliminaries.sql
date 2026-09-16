@@ -6,13 +6,14 @@
 -- ==========================================================
 
 WITH prelim_module AS (
-  INSERT INTO modules (title, subject, description, teacher_id, status)
+  INSERT INTO modules (title, subject, description, teacher_id, status, sequence_order)
   VALUES (
     'Preliminaries',
     'English - Communicative Competence',
     'Introduction to the course: about the author, table of contents, and foreword.',
     (SELECT id FROM profiles WHERE email = 'faculty1@learninghub.local'),
-    'approved'
+    'approved',
+    0
   )
   RETURNING id
 )

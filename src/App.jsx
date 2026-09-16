@@ -13,10 +13,13 @@ import ModuleBuilder from './pages/teacher/ModuleBuilder'
 import AssignmentNotes from './pages/teacher/AssignmentNotes'
 import TeacherClassManagement from './pages/teacher/ClassManagement'
 import ModulePreview from './pages/teacher/ModulePreview'
+// ModulePreview is shared: it's role-aware (see BACK_LINK inside the
+// component) and is also mounted below under an /admin route.
 
 import StudentDashboard from './pages/student/StudentDashboard'
 import MyModules from './pages/student/MyModules'
 import MyBadges from './pages/student/MyBadges'
+import Leaderboard from './pages/student/Leaderboard'
 import ModulePlayer from './pages/student/ModulePlayer'
 
 import AdminDashboard from './pages/admin/AdminDashboard'
@@ -68,6 +71,9 @@ export default function App() {
           <Route path="/student/my-badges" element={
             <PrivateRoute allowedRoles={['student']}><MyBadges /></PrivateRoute>
           } />
+          <Route path="/student/leaderboard" element={
+            <PrivateRoute allowedRoles={['student']}><Leaderboard /></PrivateRoute>
+          } />
           <Route path="/student/module/:assignmentId" element={
             <PrivateRoute allowedRoles={['student']}><ModulePlayer /></PrivateRoute>
           } />
@@ -84,6 +90,9 @@ export default function App() {
           } />
           <Route path="/admin/create-accounts" element={
             <PrivateRoute allowedRoles={['admin']}><CreateAccounts /></PrivateRoute>
+          } />
+          <Route path="/admin/module-preview/:moduleId" element={
+            <PrivateRoute allowedRoles={['admin']}><ModulePreview /></PrivateRoute>
           } />
 
           <Route path="*" element={<RoleHome />} />

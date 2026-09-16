@@ -8,6 +8,7 @@ import {
   ClipboardList,
   FilePlus2,
   Trophy,
+  Award,
   CheckSquare,
   Users,
   UserPlus,
@@ -25,7 +26,8 @@ const NAV_LINKS = {
   student: [
     { to: '/student', label: 'Dashboard', icon: LayoutDashboard },
     { to: '/student/my-modules', label: 'My Modules', icon: BookOpen },
-    { to: '/student/my-badges', label: 'My Badges', icon: Trophy },
+    { to: '/student/leaderboard', label: 'Leaderboard', icon: Trophy },
+    { to: '/student/my-badges', label: 'My Badges', icon: Award },
   ],
   admin: [
     { to: '/admin', label: 'Dashboard', icon: LayoutDashboard },

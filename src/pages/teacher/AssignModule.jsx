@@ -33,7 +33,8 @@ export default function AssignModule() {
         .from('modules')
         .select('id, title, subject, teacher_id, profiles:teacher_id ( full_name )')
         .eq('status', 'approved')
-        .order('title')
+        .order('sequence_order', { ascending: true })
+        .order('title', { ascending: true })
       setModules(mods ?? [])
 
       const { data: cls } = await supabase

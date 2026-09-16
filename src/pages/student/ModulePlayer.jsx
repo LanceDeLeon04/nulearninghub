@@ -8,9 +8,16 @@ import LectureView from '../../components/blocks/LectureView'
 import ActivityView from '../../components/blocks/ActivityView'
 import InteractiveView from '../../components/blocks/InteractiveView'
 import BlockIcon from '../../components/BlockIcon'
+import TeacherIntro from '../../components/TeacherIntro'
 import { haptic } from '../../lib/haptics'
 import { celebrate } from '../../lib/confetti'
-import { ArrowLeft, ArrowRight, Loader2 } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Loader2, Sparkles } from 'lucide-react'
+
+// Preliminaries is the very first module every student sees, so it's the
+// one place we show a short "meet your teacher" welcome before the content.
+function isPreliminariesModule(title) {
+  return (title ?? '').toLowerCase().includes('preliminar')
+}
 
 const VIEWS = {
   lecture: LectureView,
@@ -29,15 +36,46 @@ export default function ModulePlayer() {
   const [highlightsByBlock, setHighlightsByBlock] = useState({}) // content_id -> array
   const [current, setCurrent] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [teacherName, setTeacherName] = useState('Your Teacher')
+  const [showIntro, setShowIntro] = useState(false)
+
+  // Wall-clock start time for whichever block is currently open, so we can
+  // report time_spent_seconds when it's completed/submitted — this is what
+  // the server-side scoring formula uses for the speed component of points.
+  // Resets whenever the student navigates to a different block.
+  const blockStartRef = useRef(Date.now())
+  useEffect(() => {
+    blockStartRef.current = Date.now()
+  }, [current, blocks])
+
+  function elapsedSeconds() {
+    return Math.max(1, Math.round((Date.now() - blockStartRef.current) / 1000))
+  }
 
   async function loadAll() {
     setLoading(true)
     const { data: a } = await supabase
       .from('module_assignments')
-      .select('id, due_date, module_id, class_id, modules ( id, title, subject, description ), classes ( name )')
+      .select('id, due_date, module_id, class_id, modules ( id, title, subject, description, teacher_id ), classes ( name )')
       .eq('id', assignmentId)
       .single()
     setAssignment(a)
+
+    if (a?.modules?.teacher_id) {
+      const { data: teacherProfile } = await supabase
+        .from('profiles')
+        .select('full_name')
+        .eq('id', a.modules.teacher_id)
+        .single()
+      if (teacherProfile?.full_name) setTeacherName(teacherProfile.full_name)
+    }
+
+    if (a?.module_id && isPreliminariesModule(a.modules?.title)) {
+      const introKey = `intro_seen_${assignmentId}`
+      if (!localStorage.getItem(introKey)) {
+        setShowIntro(true)
+      }
+    }
 
     if (a?.module_id) {
       const { data: b } = await supabase
@@ -141,7 +179,7 @@ export default function ModulePlayer() {
 
   function handleLectureComplete(block) {
     haptic('success')
-    saveProgress(block, { completed: true, completed_at: new Date().toISOString() })
+    saveProgress(block, { completed: true, completed_at: new Date().toISOString(), time_spent_seconds: elapsedSeconds() })
   }
 
   function handleActivitySubmit(block, response, score, maxScore) {
@@ -154,12 +192,18 @@ export default function ModulePlayer() {
       max_score: maxScore,
       completed: true,
       completed_at: new Date().toISOString(),
+      time_spent_seconds: elapsedSeconds(),
     })
+  }
+
+  function dismissIntro() {
+    localStorage.setItem(`intro_seen_${assignmentId}`, '1')
+    setShowIntro(false)
   }
 
   function handleInteractiveComplete(block) {
     haptic('success')
-    saveProgress(block, { completed: true, completed_at: new Date().toISOString() })
+    saveProgress(block, { completed: true, completed_at: new Date().toISOString(), time_spent_seconds: elapsedSeconds() })
   }
 
   if (loading) {
@@ -184,9 +228,14 @@ export default function ModulePlayer() {
   const View = block ? VIEWS[block.type] : null
   const progress = block ? progressByBlock[block.id] : null
 
+  const preliminaries = isPreliminariesModule(assignment.modules?.title)
+
   return (
     <div>
       <Navbar />
+      {showIntro && (
+        <TeacherIntro teacherName={teacherName} onFinish={dismissIntro} />
+      )}
       <main className="page">
         <div className="page-header">
           <div>
@@ -195,6 +244,12 @@ export default function ModulePlayer() {
           </div>
           <Link className="btn" to="/student/my-modules"><ArrowLeft size={15} /> Back to My Modules</Link>
         </div>
+
+        {preliminaries && !showIntro && (
+          <button type="button" className="teacher-intro-replay" onClick={() => setShowIntro(true)}>
+            <Sparkles size={13} /> Meet {teacherName.split(' ')[0]} again
+          </button>
+        )}
 
         <div className="progress-bar-track">
           <div className="progress-bar-fill" style={{ width: totalBlocks ? `${(completedCount / totalBlocks) * 100}%` : '0%' }} />

@@ -14,7 +14,8 @@ export default function Modules() {
         .from('modules')
         .select('*, profiles:teacher_id ( full_name )')
         .eq('status', 'approved')
-        .order('created_at', { ascending: false })
+        .order('sequence_order', { ascending: true })
+        .order('created_at', { ascending: true })
       if (!error) setModules(data ?? [])
     }
     load()

@@ -63,7 +63,7 @@ export default function ActivityView({ data, progress, onSubmit, readOnly = fals
 
   return (
     <div className="block-view">
-      {data.instructions && <p className="muted">{data.instructions}</p>}
+      {data.instructions && <p className="muted activity-instructions">{data.instructions}</p>}
 
       {questions.map((q, qi) => {
         const isCorrect = result?.correctByQuestion ? result.correctByQuestion[q.id] : null

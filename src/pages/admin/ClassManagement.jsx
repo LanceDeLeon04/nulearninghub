@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../supabaseClient'
 import Navbar from '../../components/Navbar'
-import { Users } from 'lucide-react'
+import { Users, Trophy } from 'lucide-react'
 
 export default function ClassManagement() {
   const [classes, setClasses] = useState([])
@@ -14,6 +14,19 @@ export default function ClassManagement() {
   const [newSubject, setNewSubject] = useState('')
   const [newTeacherId, setNewTeacherId] = useState('')
   const [message, setMessage] = useState('')
+  const [expandedLeaderboard, setExpandedLeaderboard] = useState(null) // classId currently expanded
+  const [leaderboardByClass, setLeaderboardByClass] = useState({}) // classId -> rows
+
+  async function toggleLeaderboard(classId) {
+    if (expandedLeaderboard === classId) {
+      setExpandedLeaderboard(null)
+      return
+    }
+    setExpandedLeaderboard(classId)
+    if (leaderboardByClass[classId]) return // already loaded
+    const { data, error } = await supabase.rpc('get_class_leaderboard', { p_class_id: classId })
+    setLeaderboardByClass((prev) => ({ ...prev, [classId]: error ? [] : data ?? [] }))
+  }
 
   async function loadClasses() {
     const { data, error } = await supabase
@@ -170,9 +183,44 @@ export default function ClassManagement() {
                   <td>
                     <button className="btn" onClick={() => toggleExpand(c.id)}>
                       {expanded === c.id ? 'Hide Roster' : 'Manage Roster'}
+                    </button>{' '}
+                    <button className="btn" onClick={() => toggleLeaderboard(c.id)}>
+                      <Trophy size={14} /> {expandedLeaderboard === c.id ? 'Hide Leaderboard' : 'Leaderboard'}
                     </button>
                   </td>
                 </tr>
+                {expandedLeaderboard === c.id && (
+                  <tr>
+                    <td colSpan={4}>
+                      {!leaderboardByClass[c.id] ? (
+                        <p className="muted small">Loading…</p>
+                      ) : leaderboardByClass[c.id].length === 0 ? (
+                        <p className="muted small">No points logged for this section yet.</p>
+                      ) : (
+                        <table className="data-table">
+                          <thead>
+                            <tr>
+                              <th>Rank</th>
+                              <th>Student</th>
+                              <th>Points</th>
+                              <th>Badges</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {leaderboardByClass[c.id].map((r) => (
+                              <tr key={r.student_id}>
+                                <td>#{r.rank}</td>
+                                <td>{r.full_name}</td>
+                                <td>{r.total_points}</td>
+                                <td>{r.badge_count}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
+                    </td>
+                  </tr>
+                )}
                 {expanded === c.id && (
                   <tr>
                     <td colSpan={4}>

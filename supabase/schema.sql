@@ -59,8 +59,14 @@ create table if not exists modules (
   description text,
   teacher_id uuid not null references profiles (id) on delete cascade,
   status text not null default 'pending' check (status in ('pending', 'approved', 'rejected')),
+  -- Curriculum position (Preliminaries, Module 1, ... Module 4, ...), independent
+  -- of created_at/title so the catalog always lists in reading order rather
+  -- than insertion order or alphabetically ("Module 10" before "Module 2").
+  sequence_order int not null default 0,
   created_at timestamptz not null default now()
 );
+-- Safe to re-run against an existing database that predates sequence_order.
+alter table modules add column if not exists sequence_order int not null default 0;
 
 -- 5. MODULE_ASSIGNMENTS ------------------------------------------
 -- A teacher assigns an approved module to one of their own classes,
@@ -79,10 +85,16 @@ create table if not exists module_assignments (
 -- 6. BADGES + STUDENT_BADGES --------------------------------------
 create table if not exists badges (
   id uuid primary key default gen_random_uuid(),
+  -- Stable key the badge-awarding function matches on (see
+  -- award_badges_after_progress below) so badges can be renamed/reworded
+  -- without breaking the logic that grants them.
+  code text,
   name text not null,
   description text,
   icon text default '🏅'
 );
+alter table badges add column if not exists code text;
+create unique index if not exists badges_code_key on badges (code);
 
 create table if not exists student_badges (
   student_id uuid not null references profiles (id) on delete cascade,
@@ -259,9 +271,26 @@ create table if not exists student_progress (
   max_score numeric,
   completed boolean not null default false,
   completed_at timestamptz,
+  -- How long the student spent on this block, client-reported (seconds).
+  -- Used, together with the block's expected_seconds, to compute the speed
+  -- component of `points` below.
+  time_spent_seconds int,
+  -- Everything from here down is computed server-side by the
+  -- compute_progress_points trigger, never written directly by the app —
+  -- see that function for the scoring formula.
+  expected_seconds int,
+  accuracy_pct numeric,
+  speed_bonus numeric not null default 0,
+  points numeric not null default 0,
   updated_at timestamptz not null default now(),
   unique (content_id, assignment_id, student_id)
 );
+-- Safe to re-run against a database created before these columns existed.
+alter table student_progress add column if not exists time_spent_seconds int;
+alter table student_progress add column if not exists expected_seconds int;
+alter table student_progress add column if not exists accuracy_pct numeric;
+alter table student_progress add column if not exists speed_bonus numeric not null default 0;
+alter table student_progress add column if not exists points numeric not null default 0;
 
 alter table module_content enable row level security;
 alter table student_progress enable row level security;
@@ -399,3 +428,257 @@ drop policy if exists "module_images_teacher_admin_delete" on storage.objects;
 create policy "module_images_teacher_admin_delete" on storage.objects for delete using (
   bucket_id = 'module-images' and current_role_name() in ('teacher', 'admin')
 );
+
+-- ==========================================================
+-- SCORING, BADGES & LEADERBOARD
+-- ==========================================================
+-- Points, badges and rankings are computed here, server-side, rather than
+-- in the frontend. The app already trusts the client for the raw inputs
+-- (score, max_score, time_spent_seconds — same trust model as the existing
+-- client-side grading in ActivityView), but the *scoring formula itself*,
+-- and every badge award, happen in Postgres so they're consistent no
+-- matter which screen triggered the save, and so students can't just set
+-- `points` or insert `student_badges` rows directly (RLS still blocks
+-- that; see student_progress/student_badges policies above).
+
+-- 10. SEED BADGES ------------------------------------------------
+-- Upsert by `code` so re-running this file is safe and never duplicates
+-- or overwrites a badge a student may have already earned.
+insert into badges (code, name, description, icon) values
+  ('first_block', 'First Step', 'Complete your very first lecture, activity, or interactive block.', '🌱'),
+  ('perfect_score', 'Perfect Score', 'Score 100% on an activity.', '🎯'),
+  ('speed_demon', 'Speed Demon', 'Finish an activity quickly (well under par time) with at least 80% accuracy.', '⚡'),
+  ('module_complete', 'Module Master', 'Complete every block in an assigned module.', '🏆'),
+  ('streak_3', 'On a Roll', 'Score at least 80% on 3 activities in a row.', '🔥'),
+  ('points_500', 'Point Collector', 'Earn 500 total points.', '💯'),
+  ('all_types', 'All-Rounder', 'Complete at least one lecture, one activity, and one interactive block.', '🧩')
+on conflict (code) do update set
+  name = excluded.name,
+  description = excluded.description,
+  icon = excluded.icon;
+
+-- 11. SCORING -------------------------------------------------------
+-- Runs BEFORE each insert/update on student_progress and fills in the
+-- computed columns. Formula:
+--   Activities:  points = round(100 * accuracy) + speed_bonus
+--                accuracy   = score / max_score (or 1 if ungraded)
+--                par time   = 20s per question (min 20s)
+--                speed_bonus = up to +20 points, scaled by accuracy, for
+--                              finishing under par; 0 once at/over par —
+--                              being fast never helps if the answers are
+--                              wrong, and being slow never costs points
+--                              beyond the accuracy score itself.
+--   Lecture / interactive blocks: flat 10 points on completion. No speed
+--   term — rushing through reading material isn't something we want to
+--   reward, unlike answering questions quickly and correctly.
+create or replace function compute_progress_points()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_type text;
+  v_data jsonb;
+  v_qcount int;
+begin
+  if new.completed is not true then
+    new.accuracy_pct := null;
+    new.expected_seconds := null;
+    new.speed_bonus := 0;
+    new.points := 0;
+    return new;
+  end if;
+
+  select type, data into v_type, v_data from module_content where id = new.content_id;
+
+  if v_type = 'activity' then
+    if new.max_score is not null and new.max_score > 0 then
+      new.accuracy_pct := round((new.score / new.max_score)::numeric, 4);
+    else
+      new.accuracy_pct := 1;
+    end if;
+
+    v_qcount := coalesce(jsonb_array_length(v_data -> 'questions'), 1);
+    new.expected_seconds := greatest(20, v_qcount * 20);
+
+    if new.time_spent_seconds is not null and new.time_spent_seconds > 0 then
+      new.speed_bonus := round(
+        20 * new.accuracy_pct
+        * least(greatest((new.expected_seconds - new.time_spent_seconds)::numeric / new.expected_seconds, 0), 1)
+      );
+    else
+      new.speed_bonus := 0;
+    end if;
+
+    new.points := round(100 * new.accuracy_pct) + new.speed_bonus;
+  else
+    new.accuracy_pct := null;
+    new.expected_seconds := null;
+    new.speed_bonus := 0;
+    new.points := 10;
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_compute_progress_points on student_progress;
+create trigger trg_compute_progress_points
+before insert or update on student_progress
+for each row execute procedure compute_progress_points();
+
+-- 12. BADGE AWARDING -------------------------------------------------
+-- Runs AFTER each insert/update (so the row, and its computed points, are
+-- already committed and visible to the aggregate queries below). Security
+-- definer + owned by the migration role, which is exempt from RLS, so it
+-- can insert into student_badges even though the ordinary RLS policy on
+-- that table restricts inserts to teachers/admins (manual awarding still
+-- goes through that normal, RLS-checked path).
+create or replace function award_badges_after_progress()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_student uuid := new.student_id;
+  v_total_completed int;
+  v_module_id uuid;
+  v_module_block_count int;
+  v_module_completed_count int;
+  v_streak int;
+  v_total_points numeric;
+  v_has_lecture boolean;
+  v_has_activity boolean;
+  v_has_interactive boolean;
+begin
+  if new.completed is not true then
+    return new;
+  end if;
+
+  -- First Step: first ever completed block, of any type.
+  select count(*) into v_total_completed from student_progress where student_id = v_student and completed;
+  if v_total_completed = 1 then
+    insert into student_badges (student_id, badge_id)
+    select v_student, id from badges where code = 'first_block'
+    on conflict do nothing;
+  end if;
+
+  -- Perfect Score: 100% on this activity.
+  if new.max_score is not null and new.max_score > 0 and new.score = new.max_score then
+    insert into student_badges (student_id, badge_id)
+    select v_student, id from badges where code = 'perfect_score'
+    on conflict do nothing;
+  end if;
+
+  -- Speed Demon: high accuracy and (close to) the full speed bonus.
+  if new.accuracy_pct is not null and new.accuracy_pct >= 0.8 and new.speed_bonus >= 15 then
+    insert into student_badges (student_id, badge_id)
+    select v_student, id from badges where code = 'speed_demon'
+    on conflict do nothing;
+  end if;
+
+  -- Module Master: every block in this module, for this assignment, is complete.
+  select module_id into v_module_id from module_content where id = new.content_id;
+  select count(*) into v_module_block_count from module_content where module_id = v_module_id;
+  select count(*) into v_module_completed_count
+    from student_progress sp
+    join module_content mc on mc.id = sp.content_id
+    where sp.assignment_id = new.assignment_id
+      and sp.student_id = v_student
+      and sp.completed
+      and mc.module_id = v_module_id;
+  if v_module_block_count > 0 and v_module_completed_count >= v_module_block_count then
+    insert into student_badges (student_id, badge_id)
+    select v_student, id from badges where code = 'module_complete'
+    on conflict do nothing;
+  end if;
+
+  -- On a Roll: the last 3 activities completed (by time) all scored >= 80%.
+  select count(*) into v_streak from (
+    select accuracy_pct from student_progress
+    where student_id = v_student and accuracy_pct is not null
+    order by completed_at desc nulls last
+    limit 3
+  ) recent
+  where accuracy_pct >= 0.8;
+  if v_streak = 3 then
+    insert into student_badges (student_id, badge_id)
+    select v_student, id from badges where code = 'streak_3'
+    on conflict do nothing;
+  end if;
+
+  -- Point Collector: 500+ lifetime points.
+  select coalesce(sum(points), 0) into v_total_points from student_progress where student_id = v_student;
+  if v_total_points >= 500 then
+    insert into student_badges (student_id, badge_id)
+    select v_student, id from badges where code = 'points_500'
+    on conflict do nothing;
+  end if;
+
+  -- All-Rounder: at least one completed block of each type.
+  select
+    exists (select 1 from student_progress sp join module_content mc on mc.id = sp.content_id where sp.student_id = v_student and sp.completed and mc.type = 'lecture'),
+    exists (select 1 from student_progress sp join module_content mc on mc.id = sp.content_id where sp.student_id = v_student and sp.completed and mc.type = 'activity'),
+    exists (select 1 from student_progress sp join module_content mc on mc.id = sp.content_id where sp.student_id = v_student and sp.completed and mc.type = 'interactive')
+  into v_has_lecture, v_has_activity, v_has_interactive;
+  if v_has_lecture and v_has_activity and v_has_interactive then
+    insert into student_badges (student_id, badge_id)
+    select v_student, id from badges where code = 'all_types'
+    on conflict do nothing;
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_award_badges on student_progress;
+create trigger trg_award_badges
+after insert or update on student_progress
+for each row execute procedure award_badges_after_progress();
+
+-- 13. LEADERBOARD RPC -------------------------------------------------
+-- Ranks every student enrolled in a class by total points. Exposed as an
+-- RPC (not a plain view) so exactly these columns — never a student's raw
+-- answers — are what's visible to classmates. Callable by that class's
+-- teacher, any admin, or a student enrolled in the class.
+create or replace function get_class_leaderboard(p_class_id uuid)
+returns table (
+  student_id uuid,
+  full_name text,
+  total_points numeric,
+  badge_count int,
+  rank int
+)
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not (
+    current_role_name() = 'admin'
+    or exists (select 1 from classes c where c.id = p_class_id and c.teacher_id = auth.uid())
+    or exists (select 1 from class_students cs where cs.class_id = p_class_id and cs.student_id = auth.uid())
+  ) then
+    raise exception 'Not authorized to view this leaderboard';
+  end if;
+
+  return query
+  select
+    p.id as student_id,
+    p.full_name,
+    coalesce(sum(sp.points), 0) as total_points,
+    coalesce((select count(*) from student_badges sb where sb.student_id = p.id), 0)::int as badge_count,
+    rank() over (order by coalesce(sum(sp.points), 0) desc)::int as rank
+  from class_students cs
+  join profiles p on p.id = cs.student_id
+  left join module_assignments a on a.class_id = cs.class_id
+  left join student_progress sp on sp.student_id = cs.student_id and sp.assignment_id = a.id
+  where cs.class_id = p_class_id
+  group by p.id, p.full_name
+  order by total_points desc;
+end;
+$$;
+
+grant execute on function get_class_leaderboard(uuid) to authenticated;

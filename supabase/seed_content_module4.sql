@@ -21,13 +21,14 @@
 -- ==========================================================
 
 WITH mod4 AS (
-  INSERT INTO modules (title, subject, description, teacher_id, status)
+  INSERT INTO modules (title, subject, description, teacher_id, status, sequence_order)
   VALUES (
     'Module 4: Strategic Competence',
     'English - Communicative Competence',
     'Areas in Focus: Approximation and Reconstruction.',
     (SELECT id FROM profiles WHERE email = 'faculty1@learninghub.local'),
-    'approved'
+    'approved',
+    4
   )
   RETURNING id
 )

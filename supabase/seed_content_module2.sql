@@ -16,13 +16,14 @@
 -- ==========================================================
 
 WITH mod2 AS (
-  INSERT INTO modules (title, subject, description, teacher_id, status)
+  INSERT INTO modules (title, subject, description, teacher_id, status, sequence_order)
   VALUES (
     'Module 2: Sociolinguistic Competence',
     'English - Communicative Competence',
     'Area of Focus: Linguistic Realization.',
     (SELECT id FROM profiles WHERE email = 'faculty1@learninghub.local'),
-    'approved'
+    'approved',
+    2
   )
   RETURNING id
 )

@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { supabase } from '../../supabaseClient'
 import { useAuth } from '../../context/AuthContext'
 import Navbar from '../../components/Navbar'
-import { Users, NotebookPen, Eye, ChevronDown, ChevronUp } from 'lucide-react'
+import { Users, NotebookPen, Eye, ChevronDown, ChevronUp, Trophy } from 'lucide-react'
 
 // Teacher-facing class management. Unlike the admin version, teachers can't
 // create sections or add/remove students here — that's admin-only. This page
@@ -17,6 +17,19 @@ export default function ClassManagement() {
   const [expanded, setExpanded] = useState(null) // assignmentId currently expanded
   const [progressByAssignment, setProgressByAssignment] = useState({}) // assignmentId -> { studentId: {...} }
   const [loading, setLoading] = useState(true)
+  const [expandedLeaderboard, setExpandedLeaderboard] = useState(null) // classId currently expanded
+  const [leaderboardByClass, setLeaderboardByClass] = useState({}) // classId -> rows
+
+  async function toggleLeaderboard(classId) {
+    if (expandedLeaderboard === classId) {
+      setExpandedLeaderboard(null)
+      return
+    }
+    setExpandedLeaderboard(classId)
+    if (leaderboardByClass[classId]) return // already loaded
+    const { data, error } = await supabase.rpc('get_class_leaderboard', { p_class_id: classId })
+    setLeaderboardByClass((prev) => ({ ...prev, [classId]: error ? [] : data ?? [] }))
+  }
 
   useEffect(() => {
     async function load() {
@@ -117,7 +130,41 @@ export default function ClassManagement() {
                   <h3>{c.name}</h3>
                   <p className="muted small">{c.subject} — {roster.length} student{roster.length === 1 ? '' : 's'}</p>
                 </div>
+                <button className="btn" onClick={() => toggleLeaderboard(c.id)}>
+                  <Trophy size={14} /> {expandedLeaderboard === c.id ? 'Hide Leaderboard' : 'Leaderboard'}
+                </button>
               </div>
+
+              {expandedLeaderboard === c.id && (
+                <div style={{ marginTop: '0.8rem' }}>
+                  {!leaderboardByClass[c.id] ? (
+                    <p className="muted small">Loading…</p>
+                  ) : leaderboardByClass[c.id].length === 0 ? (
+                    <p className="muted small">No points logged for this section yet.</p>
+                  ) : (
+                    <table className="data-table">
+                      <thead>
+                        <tr>
+                          <th>Rank</th>
+                          <th>Student</th>
+                          <th>Points</th>
+                          <th>Badges</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {leaderboardByClass[c.id].map((r) => (
+                          <tr key={r.student_id}>
+                            <td>#{r.rank}</td>
+                            <td>{r.full_name}</td>
+                            <td>{r.total_points}</td>
+                            <td>{r.badge_count}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              )}
 
               <p className="muted small" style={{ fontWeight: 600, marginTop: '0.8rem' }}>Roster</p>
               {roster.length === 0 ? (

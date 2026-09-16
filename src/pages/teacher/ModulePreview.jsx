@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { supabase } from '../../supabaseClient'
+import { useAuth } from '../../context/AuthContext'
 import Navbar from '../../components/Navbar'
 import LectureView from '../../components/blocks/LectureView'
 import ActivityView from '../../components/blocks/ActivityView'
@@ -8,6 +9,15 @@ import InteractiveView from '../../components/blocks/InteractiveView'
 import BlockIcon from '../../components/BlockIcon'
 import { haptic } from '../../lib/haptics'
 import { ArrowLeft, ArrowRight, Eye, Loader2 } from 'lucide-react'
+
+// Where "Back" goes and what it's called, per role — this page is shared
+// by teachers (previewing before assigning) and admins (previewing before
+// approving), reached from /teacher/module-preview/:id and
+// /admin/module-preview/:id respectively.
+const BACK_LINK = {
+  admin: { to: '/admin/module-approval', label: 'Back to Module Approval' },
+  teacher: { to: '/teacher/modules', label: 'Back to Modules' },
+}
 
 const VIEWS = {
   lecture: LectureView,
@@ -21,6 +31,8 @@ const VIEWS = {
 // a module without being able to act as a student.
 export default function ModulePreview() {
   const { moduleId } = useParams()
+  const { role } = useAuth()
+  const back = BACK_LINK[role] ?? BACK_LINK.teacher
   const [module, setModule] = useState(null)
   const [blocks, setBlocks] = useState([])
   const [current, setCurrent] = useState(0)
@@ -77,7 +89,7 @@ export default function ModulePreview() {
             <h1><Eye size={22} /> {module.title}</h1>
             <p className="subtitle">{module.subject} — by {module.profiles?.full_name}</p>
           </div>
-          <Link className="btn" to="/teacher/modules"><ArrowLeft size={15} /> Back to Modules</Link>
+          <Link className="btn" to={back.to}><ArrowLeft size={15} /> {back.label}</Link>
         </div>
 
         <div className="info-banner">

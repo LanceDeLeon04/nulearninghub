@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { supabase } from '../../supabaseClient'
 import Navbar from '../../components/Navbar'
-import { CheckSquare } from 'lucide-react'
+import { CheckSquare, Eye } from 'lucide-react'
 
 const STATUS_LABEL = {
   pending: 'Pending Approval',
@@ -27,7 +28,8 @@ export default function ModuleApproval() {
     const { data, error } = await supabase
       .from('modules')
       .select('*, profiles:teacher_id ( full_name, email )')
-      .order('created_at', { ascending: false })
+      .order('sequence_order', { ascending: true })
+      .order('created_at', { ascending: true })
     if (!error) setModules(data ?? [])
   }
 
@@ -79,6 +81,7 @@ export default function ModuleApproval() {
               <p className="muted small">Submitted {new Date(m.created_at).toLocaleDateString()}</p>
 
               <div className="row-actions">
+                <Link className="btn" to={`/admin/module-preview/${m.id}`}><Eye size={14} /> View</Link>
                 {m.status !== 'approved' && (
                   <button className="btn btn-approve" onClick={() => updateStatus(m.id, 'approved')}>Approve</button>
                 )}
