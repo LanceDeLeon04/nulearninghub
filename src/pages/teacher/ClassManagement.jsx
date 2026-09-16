@@ -4,6 +4,7 @@ import { supabase } from '../../supabaseClient'
 import { useAuth } from '../../context/AuthContext'
 import Navbar from '../../components/Navbar'
 import { Users, NotebookPen, Eye, ChevronDown, ChevronUp, Trophy } from 'lucide-react'
+import { formatUsername } from '../../lib/formatUsername'
 
 // Teacher-facing class management. Unlike the admin version, teachers can't
 // create sections or add/remove students here — that's admin-only. This page
@@ -172,7 +173,7 @@ export default function ClassManagement() {
               ) : (
                 <div className="student-list two-col">
                   {roster.map((s) => (
-                    <span key={s.id} className="student-row">{s.full_name} <span className="muted">({s.email})</span></span>
+                    <span key={s.id} className="student-row">{s.full_name} <span className="muted">({formatUsername(s.email)})</span></span>
                   ))}
                 </div>
               )}

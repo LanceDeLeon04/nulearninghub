@@ -48,7 +48,7 @@ function NewChatPicker({ onClose, onPick }) {
       <div className="chat-new-picker-header">
         <div className="field-icon-wrap" style={{ flex: 1 }}>
           <Search size={15} className="field-icon" />
-          <input autoFocus placeholder="Search everyone by name…" value={query} onChange={(e) => setQuery(e.target.value)} />
+          <input autoFocus placeholder="Search by name…" value={query} onChange={(e) => setQuery(e.target.value)} />
         </div>
         <button type="button" className="btn btn-sm btn-ghost" onClick={onClose}><X size={14} /></button>
       </div>

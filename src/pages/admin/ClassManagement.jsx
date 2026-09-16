@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../../supabaseClient'
 import Navbar from '../../components/Navbar'
 import { Users, Trophy } from 'lucide-react'
+import { formatUsername } from '../../lib/formatUsername'
 
 export default function ClassManagement() {
   const [classes, setClasses] = useState([])
@@ -146,7 +147,7 @@ export default function ClassManagement() {
               <select value={newTeacherId} onChange={(e) => setNewTeacherId(e.target.value)} required>
                 <option value="" disabled>Select a teacher</option>
                 {teachers.map((t) => (
-                  <option key={t.id} value={t.id}>{t.full_name} ({t.email})</option>
+                  <option key={t.id} value={t.id}>{t.full_name} ({formatUsername(t.email)})</option>
                 ))}
               </select>
             </label>
@@ -230,7 +231,7 @@ export default function ClassManagement() {
                           <ul className="roster-list">
                             {(rosters[c.id] ?? []).map((r) => (
                               <li key={r.student_id}>
-                                {r.profiles?.full_name} — {r.profiles?.email}{' '}
+                                {r.profiles?.full_name} — {formatUsername(r.profiles?.email)}{' '}
                                 <button
                                   className="btn btn-reject"
                                   style={{ padding: '2px 8px', fontSize: '11px', marginLeft: '6px' }}
@@ -253,7 +254,7 @@ export default function ClassManagement() {
                             {students
                               .filter((s) => !(rosters[c.id] ?? []).some((r) => r.student_id === s.id))
                               .map((s) => (
-                                <option key={s.id} value={s.id}>{s.full_name} ({s.email})</option>
+                                <option key={s.id} value={s.id}>{s.full_name} ({formatUsername(s.email)})</option>
                               ))}
                           </select>
                         </div>
