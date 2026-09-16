@@ -39,6 +39,13 @@ export default function ModulePlayer() {
   const [teacherName, setTeacherName] = useState('Your Teacher')
   const [showIntro, setShowIntro] = useState(false)
 
+  // Pair Activities: classmates in this assignment's class (to pick a
+  // partner from) and every pair_requests row involving the current
+  // student, for any block in this module.
+  const [classmates, setClassmates] = useState([]) // [{ id, full_name }]
+  const [pairRequests, setPairRequests] = useState([])
+  const [pairBusy, setPairBusy] = useState(false)
+
   // Wall-clock start time for whichever block is currently open, so we can
   // report time_spent_seconds when it's completed/submitted — this is what
   // the server-side scoring formula uses for the speed component of points.
@@ -110,9 +117,49 @@ export default function ModulePlayer() {
     setLoading(false)
   }
 
+  async function loadPairData(classId) {
+    if (!classId) return
+    const { data: mates } = await supabase
+      .from('class_students')
+      .select('student_id, profiles ( id, full_name )')
+      .eq('class_id', classId)
+    setClassmates(
+      (mates ?? [])
+        .map((m) => m.profiles)
+        .filter((p) => p && p.id !== user.id)
+    )
+
+    const { data: reqs } = await supabase
+      .from('pair_requests')
+      .select('*, requester:requester_id ( id, full_name ), partner:partner_id ( id, full_name )')
+      .eq('assignment_id', assignmentId)
+      .or(`requester_id.eq.${user.id},partner_id.eq.${user.id}`)
+    setPairRequests(reqs ?? [])
+  }
+
   useEffect(() => {
     if (user) loadAll()
   }, [assignmentId, user])
+
+  useEffect(() => {
+    if (user && assignment?.class_id) loadPairData(assignment.class_id)
+  }, [user, assignment?.class_id])
+
+  // Live-refresh pair requests: so the invited partner sees a new request
+  // appear, and the requester sees the moment it's accepted, without a
+  // manual reload.
+  useEffect(() => {
+    if (!user || !assignmentId) return
+    const channel = supabase
+      .channel(`pair_requests_${assignmentId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'pair_requests', filter: `assignment_id=eq.${assignmentId}` },
+        () => { if (assignment?.class_id) loadPairData(assignment.class_id) }
+      )
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [user, assignmentId, assignment?.class_id])
 
   const totalBlocks = blocks.length
   const completedCount = useMemo(
@@ -143,6 +190,48 @@ export default function ModulePlayer() {
       ;({ error } = await supabase.from('student_progress').insert(payload))
     }
     if (!error) await loadAll()
+  }
+
+  // Pair-request info for one activity block, in the shape PairRequestPanel
+  // expects. Built fresh per block since each pair-mode activity in the
+  // module has its own independent pairing.
+  function pairingForBlock(block) {
+    if (!block || block.type !== 'activity' || block.data?.mode !== 'pair') return null
+    const forBlock = pairRequests.filter((r) => r.content_id === block.id)
+    const accepted = forBlock.find((r) => r.status === 'accepted')
+    const incoming = forBlock.filter((r) => r.status === 'pending' && r.partner_id === user.id)
+    const outgoing = forBlock.filter((r) => r.status === 'pending' && r.requester_id === user.id)
+    return {
+      classmates,
+      partner: accepted ? (accepted.requester_id === user.id ? accepted.partner : accepted.requester) : null,
+      incoming: incoming.map((r) => ({ id: r.id, requesterName: r.requester?.full_name ?? 'Classmate' })),
+      outgoing: outgoing.map((r) => ({ id: r.id, partnerName: r.partner?.full_name ?? 'Classmate' })),
+      busy: pairBusy,
+      onSend: (partnerId) => sendPairRequest(block, partnerId),
+      onAccept: (requestId) => respondPairRequest(requestId, 'accepted'),
+      onDecline: (requestId) => respondPairRequest(requestId, 'declined'),
+      onCancel: (requestId) => respondPairRequest(requestId, 'cancelled'),
+    }
+  }
+
+  async function sendPairRequest(block, partnerId) {
+    setPairBusy(true)
+    haptic('tap')
+    await supabase.from('pair_requests').insert({
+      content_id: block.id,
+      assignment_id: assignmentId,
+      requester_id: user.id,
+      partner_id: partnerId,
+    })
+    await loadPairData(assignment.class_id)
+    setPairBusy(false)
+  }
+
+  async function respondPairRequest(requestId, status) {
+    setPairBusy(true)
+    await supabase.from('pair_requests').update({ status }).eq('id', requestId)
+    await loadPairData(assignment.class_id)
+    setPairBusy(false)
   }
 
   async function addHighlight(block, { start_offset, end_offset, quote, note }) {
@@ -182,10 +271,26 @@ export default function ModulePlayer() {
     saveProgress(block, { completed: true, completed_at: new Date().toISOString(), time_spent_seconds: elapsedSeconds() })
   }
 
-  function handleActivitySubmit(block, response, score, maxScore) {
+  async function handleActivitySubmit(block, response, score, maxScore) {
     // Celebrate every graded submission — bigger burst for a perfect score.
     const perfect = maxScore > 0 && score === maxScore
     celebrate({ big: perfect })
+
+    if (block.data?.mode === 'pair') {
+      // Pair activities write both students' progress rows in one RPC call
+      // (student_progress RLS only lets each student write their own row).
+      const { error } = await supabase.rpc('submit_pair_activity_progress', {
+        p_content_id: block.id,
+        p_assignment_id: assignmentId,
+        p_response: response,
+        p_score: score,
+        p_max_score: maxScore,
+        p_time_spent_seconds: elapsedSeconds(),
+      })
+      if (!error) await loadAll()
+      return
+    }
+
     saveProgress(block, {
       response,
       score,
@@ -284,6 +389,7 @@ export default function ModulePlayer() {
                   highlights={block.type === 'lecture' ? (highlightsByBlock[block.id] ?? []) : []}
                   onAddHighlight={block.type === 'lecture' ? (h) => addHighlight(block, h) : undefined}
                   onDeleteHighlight={block.type === 'lecture' ? (id) => deleteHighlight(block, id) : undefined}
+                  pairing={block.type === 'activity' ? pairingForBlock(block) : undefined}
                 />
               )}
             </div>

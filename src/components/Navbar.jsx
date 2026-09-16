@@ -1,5 +1,7 @@
+import { useEffect, useState } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { supabase } from '../supabaseClient'
 import nuLogo from '../assets/nu-logo-full.png'
 import { haptic } from '../lib/haptics'
 import {
@@ -12,6 +14,7 @@ import {
   CheckSquare,
   Users,
   UserPlus,
+  MessageSquare,
   LogOut,
 } from 'lucide-react'
 
@@ -38,11 +41,40 @@ const NAV_LINKS = {
 }
 
 export default function Navbar() {
-  const { role, profile, signOut } = useAuth()
+  const { user, role, profile, signOut } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const links = NAV_LINKS[role] ?? []
   const initial = (profile?.full_name ?? 'U').trim().charAt(0).toUpperCase()
+  const [unread, setUnread] = useState(0)
+
+  async function refreshUnread() {
+    const { data } = await supabase.rpc('get_unread_message_count')
+    if (typeof data === 'number') setUnread(data)
+  }
+
+  useEffect(() => {
+    if (!user) return
+    refreshUnread()
+    // Any new message anywhere may belong to one of this user's
+    // conversations (RLS on messages already scopes what's delivered) —
+    // just re-ask for the total rather than tracking per-conversation state.
+    const channel = supabase
+      .channel(`navbar_unread_${user.id}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, refreshUnread)
+      .subscribe()
+    const interval = setInterval(refreshUnread, 30000)
+    return () => { supabase.removeChannel(channel); clearInterval(interval) }
+  }, [user])
+
+  // Clear the badge the moment the person opens Messages, without waiting
+  // for the next poll — the page itself marks conversations read.
+  useEffect(() => {
+    if (location.pathname === '/messages') {
+      const t = setTimeout(refreshUnread, 500)
+      return () => clearTimeout(t)
+    }
+  }, [location.pathname])
 
   async function handleSignOut() {
     haptic('tap')
@@ -71,6 +103,15 @@ export default function Navbar() {
             </Link>
           )
         })}
+        <Link
+          to="/messages"
+          className={location.pathname === '/messages' ? 'nav-link-active' : ''}
+          onClick={() => haptic('tap')}
+        >
+          <MessageSquare size={15} strokeWidth={2.4} />
+          Messages
+          {unread > 0 && <span className="nav-unread-badge">{unread > 99 ? '99+' : unread}</span>}
+        </Link>
       </nav>
       <div className="navbar-user">
         <span className="navbar-user-info">

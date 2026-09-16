@@ -15,6 +15,14 @@ export const BLOCK_TYPES = [
   { type: 'interactive', label: 'Interactive', icon: 'interactive', description: 'Flashcards or clickable image hotspots.' },
 ]
 
+// An activity's data.mode: 'individual' (default, every student answers on
+// their own) or 'pair' (two classmates request/accept a partner, then
+// submit and are graded together — see PairRequestPanel + ModulePlayer).
+export const ACTIVITY_MODES = [
+  { mode: 'individual', label: 'Individual' },
+  { mode: 'pair', label: 'Pair Activity' },
+]
+
 export const QUESTION_TYPES = [
   { type: 'multiple_choice', label: 'Multiple Choice' },
   { type: 'true_false', label: 'True / False' },
@@ -40,7 +48,7 @@ export function defaultBlockData(type) {
     return { body: '', readAloudEnabled: true }
   }
   if (type === 'activity') {
-    return { instructions: '', questions: [] }
+    return { instructions: '', questions: [], mode: 'individual' }
   }
   if (type === 'interactive') {
     return { subtype: 'flashcards', cards: [] }

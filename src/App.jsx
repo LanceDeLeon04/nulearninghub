@@ -4,6 +4,7 @@ import PrivateRoute from './components/PrivateRoute'
 
 import Login from './pages/Login'
 import RoleHome from './pages/RoleHome'
+import Messages from './pages/Messages'
 
 import TeacherDashboard from './pages/teacher/TeacherDashboard'
 import Modules from './pages/teacher/Modules'
@@ -34,6 +35,11 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/" element={<RoleHome />} />
+
+          {/* Messages — in-app chat, available to every role */}
+          <Route path="/messages" element={
+            <PrivateRoute allowedRoles={['admin', 'teacher', 'student']}><Messages /></PrivateRoute>
+          } />
 
           {/* Teacher routes */}
           <Route path="/teacher" element={

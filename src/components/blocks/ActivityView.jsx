@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { gradeActivity, shuffle } from '../../lib/blockTypes'
 import { ArrowLeftRight, Send, Award, CheckCircle2, XCircle } from 'lucide-react'
 import { haptic } from '../../lib/haptics'
+import PairRequestPanel, { PairedBanner } from '../PairRequestPanel'
 
 function MatchingQuestion({ question, value, onAnswer, locked }) {
   const shuffledRights = useMemo(
@@ -36,7 +37,7 @@ function MatchingQuestion({ question, value, onAnswer, locked }) {
   )
 }
 
-export default function ActivityView({ data, progress, onSubmit, readOnly = false }) {
+export default function ActivityView({ data, progress, onSubmit, readOnly = false, pairing = null }) {
   const questions = data.questions ?? []
   const alreadySubmitted = progress?.completed ?? false
   const [responses, setResponses] = useState(progress?.response ?? {})
@@ -44,6 +45,14 @@ export default function ActivityView({ data, progress, onSubmit, readOnly = fals
     alreadySubmitted ? { score: progress.score, maxScore: progress.max_score, correctByQuestion: null } : null
   )
   const [justSubmitted, setJustSubmitted] = useState(false)
+
+  const isPairMode = data.mode === 'pair'
+  // Not yet paired and there's actually something to gate on (student view,
+  // not teacher/admin preview, which never passes `pairing`) — show the
+  // request/accept flow instead of the questions.
+  if (isPairMode && !readOnly && pairing && !pairing.partner && !alreadySubmitted) {
+    return <PairRequestPanel pairing={pairing} />
+  }
 
   function setAnswer(qid, value) {
     if (readOnly) return
@@ -63,6 +72,8 @@ export default function ActivityView({ data, progress, onSubmit, readOnly = fals
 
   return (
     <div className="block-view">
+      {isPairMode && pairing?.partner && <PairedBanner partnerName={pairing.partner.full_name} />}
+      {isPairMode && !pairing && alreadySubmitted && <PairedBanner partnerName="your partner" />}
       {data.instructions && <p className="muted activity-instructions">{data.instructions}</p>}
 
       {questions.map((q, qi) => {

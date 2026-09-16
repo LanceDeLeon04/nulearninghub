@@ -120,6 +120,23 @@ returns text as $$
   select role from profiles where id = auth.uid();
 $$ language sql stable;
 
+-- Helpers to break the classes <-> class_students RLS recursion below.
+-- classes_select needs to check class_students, and class_students_select
+-- needs to check classes — evaluated inline, that's a policy-evaluation
+-- cycle ("infinite recursion detected in policy for relation classes").
+-- Wrapping each check in its own SECURITY DEFINER function makes that
+-- lookup run as the function owner (bypassing RLS on the table it reads),
+-- so evaluating one table's policy no longer re-triggers the other's.
+create or replace function is_class_teacher(cid uuid)
+returns boolean as $$
+  select exists (select 1 from classes where id = cid and teacher_id = auth.uid());
+$$ language sql stable security definer set search_path = public;
+
+create or replace function is_class_student(cid uuid)
+returns boolean as $$
+  select exists (select 1 from class_students where class_id = cid and student_id = auth.uid());
+$$ language sql stable security definer set search_path = public;
+
 -- Drop legacy policy names from earlier versions of this schema that let
 -- teachers create classes / add students directly — safe no-ops if they
 -- were never created. Without this, a re-run of this file on a database
@@ -143,10 +160,7 @@ drop policy if exists "classes_select" on classes;
 create policy "classes_select" on classes for select using (
   teacher_id = auth.uid()
   or current_role_name() = 'admin'
-  or exists (
-    select 1 from class_students cs
-    where cs.class_id = classes.id and cs.student_id = auth.uid()
-  )
+  or is_class_student(classes.id)
 );
 drop policy if exists "classes_insert_admin_only" on classes;
 create policy "classes_insert_admin_only" on classes for insert with check (
@@ -167,7 +181,7 @@ drop policy if exists "class_students_select" on class_students;
 create policy "class_students_select" on class_students for select using (
   student_id = auth.uid()
   or current_role_name() = 'admin'
-  or exists (select 1 from classes c where c.id = class_students.class_id and c.teacher_id = auth.uid())
+  or is_class_teacher(class_students.class_id)
 );
 drop policy if exists "class_students_insert_admin_only" on class_students;
 create policy "class_students_insert_admin_only" on class_students for insert with check (
@@ -175,7 +189,7 @@ create policy "class_students_insert_admin_only" on class_students for insert wi
 );
 drop policy if exists "class_students_delete" on class_students;
 create policy "class_students_delete" on class_students for delete using (
-  exists (select 1 from classes c where c.id = class_students.class_id and c.teacher_id = auth.uid())
+  is_class_teacher(class_students.class_id)
   or current_role_name() = 'admin'
 );
 
@@ -203,17 +217,14 @@ create policy "modules_update_owner_or_admin" on modules for update using (
 drop policy if exists "module_assignments_select" on module_assignments;
 create policy "module_assignments_select" on module_assignments for select using (
   current_role_name() = 'admin'
-  or exists (select 1 from classes c where c.id = module_assignments.class_id and c.teacher_id = auth.uid())
-  or exists (
-    select 1 from class_students cs
-    where cs.class_id = module_assignments.class_id and cs.student_id = auth.uid()
-  )
+  or is_class_teacher(module_assignments.class_id)
+  or is_class_student(module_assignments.class_id)
 );
 drop policy if exists "module_assignments_insert" on module_assignments;
 create policy "module_assignments_insert" on module_assignments for insert with check (
   assigned_by = auth.uid()
   and current_role_name() = 'teacher'
-  and exists (select 1 from classes c where c.id = module_assignments.class_id and c.teacher_id = auth.uid())
+  and is_class_teacher(module_assignments.class_id)
   and exists (select 1 from modules m where m.id = module_assignments.module_id and m.status = 'approved')
 );
 drop policy if exists "module_assignments_delete" on module_assignments;
@@ -658,8 +669,8 @@ as $$
 begin
   if not (
     current_role_name() = 'admin'
-    or exists (select 1 from classes c where c.id = p_class_id and c.teacher_id = auth.uid())
-    or exists (select 1 from class_students cs where cs.class_id = p_class_id and cs.student_id = auth.uid())
+    or is_class_teacher(p_class_id)
+    or is_class_student(p_class_id)
   ) then
     raise exception 'Not authorized to view this leaderboard';
   end if;

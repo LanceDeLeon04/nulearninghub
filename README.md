@@ -29,6 +29,7 @@ learning-hub/
 │       └── admin/    (Dashboard, ModuleApproval, ClassManagement, CreateAccounts)
 ├── supabase/
 │   ├── schema.sql                # tables + RLS policies + storage bucket
+│   ├── schema_chat_and_pairs.sql # in-app chat (all users) + pair-activity requests, run after schema.sql
 │   └── functions/create-user/    # edge function: admin-only account creation
 ├── .env.example
 └── package.json
@@ -81,7 +82,7 @@ in `student_progress`.
 ## Setup
 
 1. Create a Supabase project.
-2. In the SQL editor, run `supabase/schema.sql`.
+2. In the SQL editor, run `supabase/schema.sql`, then `supabase/schema_chat_and_pairs.sql`.
 3. Deploy the edge function:
    ```
    supabase functions deploy create-user

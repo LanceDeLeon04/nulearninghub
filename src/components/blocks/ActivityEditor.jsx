@@ -1,5 +1,5 @@
-import { QUESTION_TYPES, defaultQuestion } from '../../lib/blockTypes'
-import { X, Plus, ArrowLeftRight, Trash2 } from 'lucide-react'
+import { QUESTION_TYPES, ACTIVITY_MODES, defaultQuestion } from '../../lib/blockTypes'
+import { X, Plus, ArrowLeftRight, Trash2, Users } from 'lucide-react'
 
 function QuestionEditor({ question, onChange, onRemove }) {
   function update(patch) {
@@ -187,6 +187,23 @@ export default function ActivityEditor({ data, onChange }) {
           placeholder="Instructions students see before answering."
         />
       </label>
+
+      <label>
+        <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}><Users size={14} /> Activity Mode</span>
+        <select
+          value={data.mode ?? 'individual'}
+          onChange={(e) => onChange({ ...data, mode: e.target.value })}
+        >
+          {ACTIVITY_MODES.map((m) => (
+            <option key={m.mode} value={m.mode}>{m.label}</option>
+          ))}
+        </select>
+      </label>
+      {data.mode === 'pair' && (
+        <p className="muted small">
+          Students must request and accept a classmate as a partner before answering. Both students are submitted and graded together.
+        </p>
+      )}
 
       {questions.map((q, i) => (
         <QuestionEditor
