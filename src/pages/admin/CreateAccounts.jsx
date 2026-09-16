@@ -88,12 +88,12 @@ function AccountTable({ title, accounts, role, editingId, onEdit, onCancelEdit, 
                 <td>{formatUsername(a.email)}</td>
                 <td></td>
                 <td>
-                  <div className="row-actions">
-                    <button className="btn btn-sm" onClick={() => onEdit(a.id)}>
-                      <Pencil size={13} /> Edit
+                  <div className="row-actions" style={{ marginTop: 0 }}>
+                    <button className="btn-icon" title="Edit" aria-label="Edit" onClick={() => onEdit(a.id)}>
+                      <Pencil size={13} />
                     </button>
-                    <button className="btn btn-reject btn-sm" onClick={() => onDelete(a)}>
-                      <Trash2 size={13} /> Delete
+                    <button className="btn-icon btn-icon-danger" title="Delete" aria-label="Delete" onClick={() => onDelete(a)}>
+                      <Trash2 size={13} />
                     </button>
                   </div>
                 </td>

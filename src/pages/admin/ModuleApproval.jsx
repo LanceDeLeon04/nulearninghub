@@ -175,23 +175,29 @@ export default function ModuleApproval() {
                 <p>{m.description}</p>
                 <p className="muted small">Submitted {new Date(m.created_at).toLocaleDateString()}</p>
 
-                <div className="row-actions">
-                  <Link className="btn" to={`/admin/module-preview/${m.id}`}><Eye size={14} /> View</Link>
-                  {m.status !== 'approved' && (
-                    <button className="btn btn-approve" onClick={() => updateStatus(m.id, 'approved')}>Approve</button>
-                  )}
-                  {m.status !== 'rejected' && (
-                    <button className="btn btn-reject" onClick={() => updateStatus(m.id, 'rejected')}>Reject</button>
-                  )}
-                  {m.status !== 'pending' && (
-                    <button className="btn" onClick={() => updateStatus(m.id, 'pending')}>Reset to Pending</button>
-                  )}
-                  <button className="btn" onClick={() => setEditingId(m.id)}>
-                    <Pencil size={14} /> Edit
-                  </button>
-                  <button className="btn btn-reject" onClick={() => handleDelete(m)}>
-                    <Trash2 size={14} /> Delete
-                  </button>
+                <div className="module-card-footer">
+                  <div className="module-card-footer-row">
+                    <Link className="btn btn-sm" to={`/admin/module-preview/${m.id}`}><Eye size={14} /> View</Link>
+                    <div className="module-card-icon-actions">
+                      <button className="btn-icon" title="Edit module" aria-label="Edit module" onClick={() => setEditingId(m.id)}>
+                        <Pencil size={14} />
+                      </button>
+                      <button className="btn-icon btn-icon-danger" title="Delete module" aria-label="Delete module" onClick={() => handleDelete(m)}>
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="module-card-status-actions">
+                    {m.status !== 'approved' && (
+                      <button className="btn-outline btn-outline-approve btn-sm" onClick={() => updateStatus(m.id, 'approved')}>Approve</button>
+                    )}
+                    {m.status !== 'rejected' && (
+                      <button className="btn-outline btn-outline-reject btn-sm" onClick={() => updateStatus(m.id, 'rejected')}>Reject</button>
+                    )}
+                    {m.status !== 'pending' && (
+                      <button className="btn-outline btn-sm" onClick={() => updateStatus(m.id, 'pending')}>Reset to Pending</button>
+                    )}
+                  </div>
                 </div>
               </div>
             )

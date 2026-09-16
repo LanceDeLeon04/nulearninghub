@@ -239,20 +239,20 @@ export default function ClassManagement() {
                         </button>
                       </>
                     ) : (
-                      <>
-                        <button className="btn btn-sm" onClick={() => startEditClass(c)}>
-                          <Pencil size={13} /> Edit
-                        </button>{' '}
-                        <button className="btn" onClick={() => toggleExpand(c.id)}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+                        <button className="btn btn-sm" onClick={() => toggleExpand(c.id)}>
                           {expanded === c.id ? 'Hide Roster' : 'Manage Roster'}
-                        </button>{' '}
-                        <button className="btn" onClick={() => toggleLeaderboard(c.id)}>
-                          <Trophy size={14} /> {expandedLeaderboard === c.id ? 'Hide Leaderboard' : 'Leaderboard'}
-                        </button>{' '}
-                        <button className="btn btn-reject btn-sm" onClick={() => handleDeleteClass(c)}>
-                          <Trash2 size={13} /> Delete
                         </button>
-                      </>
+                        <button className="btn btn-sm" onClick={() => toggleLeaderboard(c.id)}>
+                          <Trophy size={13} /> {expandedLeaderboard === c.id ? 'Hide' : 'Leaderboard'}
+                        </button>
+                        <button className="btn-icon" title="Edit section" aria-label="Edit section" onClick={() => startEditClass(c)}>
+                          <Pencil size={13} />
+                        </button>
+                        <button className="btn-icon btn-icon-danger" title="Delete section" aria-label="Delete section" onClick={() => handleDeleteClass(c)}>
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
                     )}
                   </td>
                 </tr>

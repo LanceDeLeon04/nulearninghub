@@ -222,6 +222,30 @@ button:focus-visible { outline: none; box-shadow: var(--shadow-glow); }
 .btn-ghost:hover { background: rgba(255,255,255,0.85); box-shadow: none; }
 .btn-sm { padding: 0.32rem 0.55rem; font-size: 0.78rem; }
 
+/* Calmer alternative to the solid .btn-approve/.btn-reject fills — used for
+   secondary/status actions so a card isn't wall-to-wall saturated color. */
+.btn-outline {
+  background: transparent; box-shadow: none;
+  border: 1.5px solid var(--glass-border-card); color: var(--muted);
+}
+.btn-outline:hover { background: var(--glass-bg-soft); box-shadow: none; transform: translateY(-1px); }
+.btn-outline-approve { color: var(--success); border-color: rgba(22,163,74,0.35); }
+.btn-outline-approve:hover { background: rgba(22,163,74,0.1); }
+.btn-outline-reject { color: var(--danger); border-color: rgba(220,38,38,0.35); }
+.btn-outline-reject:hover { background: rgba(220,38,38,0.1); }
+
+/* Compact icon-only button for secondary row actions (edit/delete) so they
+   read as utility controls rather than competing with the primary action. */
+.btn-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; flex-shrink: 0; padding: 0; border: none;
+  border-radius: 8px; cursor: pointer;
+  background: var(--glass-bg-strong); border: 1px solid var(--glass-border-card);
+  color: var(--muted); transition: background 0.15s ease, color 0.15s ease, transform 0.15s ease;
+}
+.btn-icon:hover { background: rgba(74,91,196,0.12); color: var(--primary); transform: translateY(-1px); }
+.btn-icon-danger:hover { background: rgba(220,38,38,0.12); color: var(--danger); }
+
 /* ===================== Forms ===================== */
 
 label { display: flex; flex-direction: column; gap: 0.4rem; font-size: 0.88rem; font-weight: 600; color: var(--text); }
@@ -819,6 +843,14 @@ input:focus, select:focus, textarea:focus {
 }
 .action-card h3, .module-card h3 { margin: 0 0 0.4rem; color: var(--primary-dark); display: flex; align-items: center; gap: 0.5rem; }
 .action-card p, .module-card p { margin: 0; color: var(--muted); font-size: 0.88rem; line-height: 1.5; }
+
+/* Module Approval card footer: primary action + icon utilities on one row,
+   status-change pills on a second row below a divider, instead of five
+   same-weight buttons stacked on top of each other. */
+.module-card-footer { margin-top: 1rem; padding-top: 0.8rem; border-top: 1px solid var(--glass-border-soft); display: flex; flex-direction: column; gap: 0.6rem; }
+.module-card-footer-row { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
+.module-card-icon-actions { display: flex; gap: 0.4rem; }
+.module-card-status-actions { display: flex; gap: 0.4rem; flex-wrap: wrap; }
 
 .form-card {
   background: var(--glass-bg);
