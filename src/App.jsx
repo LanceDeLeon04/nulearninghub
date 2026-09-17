@@ -6,6 +6,7 @@ import FloatingMessageButton from './components/FloatingMessageButton'
 import Login from './pages/Login'
 import RoleHome from './pages/RoleHome'
 import Messages from './pages/Messages'
+import ResourcesHub from './pages/ResourcesHub'
 
 import TeacherDashboard from './pages/teacher/TeacherDashboard'
 import Modules from './pages/teacher/Modules'
@@ -15,6 +16,7 @@ import ModuleBuilder from './pages/teacher/ModuleBuilder'
 import AssignmentNotes from './pages/teacher/AssignmentNotes'
 import TeacherClassManagement from './pages/teacher/ClassManagement'
 import ModulePreview from './pages/teacher/ModulePreview'
+import TeachersGuide from './pages/teacher/TeachersGuide'
 // ModulePreview is shared: it's role-aware (see BACK_LINK inside the
 // component) and is also mounted below under an /admin route.
 
@@ -42,6 +44,12 @@ export default function App() {
             <PrivateRoute allowedRoles={['admin', 'teacher', 'student']}><Messages /></PrivateRoute>
           } />
 
+          {/* References & Rubric — permanent, not tied to any module/assignment,
+              available to every role from the top nav */}
+          <Route path="/resources" element={
+            <PrivateRoute allowedRoles={['admin', 'teacher', 'student']}><ResourcesHub /></PrivateRoute>
+          } />
+
           {/* Teacher routes */}
           <Route path="/teacher" element={
             <PrivateRoute allowedRoles={['teacher']}><TeacherDashboard /></PrivateRoute>
@@ -66,6 +74,9 @@ export default function App() {
           } />
           <Route path="/teacher/module-preview/:moduleId" element={
             <PrivateRoute allowedRoles={['teacher']}><ModulePreview /></PrivateRoute>
+          } />
+          <Route path="/teacher/teachers-guide" element={
+            <PrivateRoute allowedRoles={['teacher']}><TeachersGuide /></PrivateRoute>
           } />
 
           {/* Student routes */}
