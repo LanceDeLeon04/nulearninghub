@@ -382,6 +382,13 @@ export default function ModulePlayer() {
               <h3><BlockIcon type={block.type} size={18} /> {block.title}</h3>
               {View && (
                 <View
+                  // Without a key, React reuses the same component instance
+                  // when moving between two blocks of the same type, so an
+                  // ActivityView carries its `responses`/`result` state over
+                  // to the next activity — which renders it already graded
+                  // and permanently locked. Keying on the block id forces a
+                  // fresh mount per block.
+                  key={block.id}
                   data={block.data}
                   progress={progress}
                   onComplete={() => (block.type === 'lecture' ? handleLectureComplete(block) : handleInteractiveComplete(block))}

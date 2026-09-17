@@ -15,24 +15,42 @@ create table if not exists profiles (
 
 -- Auto-create a profile row when a new auth user is created.
 -- (The edge function passes role/full_name via user metadata.)
-create or replace function handle_new_user()
-returns trigger as $$
+-- SECURITY DEFINER + an explicit search_path, and every table reference
+-- schema-qualified: the insert into auth.users runs as supabase_auth_admin,
+-- whose search_path does NOT include public. Without this, `profiles`
+-- fails to resolve, the trigger raises, the insert rolls back, and the
+-- client sees GoTrue's opaque "Database error creating new user".
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
 begin
-  insert into profiles (id, full_name, email, role)
+  insert into public.profiles (id, full_name, email, role)
   values (
     new.id,
-    coalesce(new.raw_user_meta_data->>'full_name', new.email),
-    new.email,
-    coalesce(new.raw_user_meta_data->>'role', 'student')
-  );
+    coalesce(nullif(new.raw_user_meta_data->>'full_name', ''), new.email, 'Unnamed user'),
+    coalesce(new.email, ''),
+    case
+      when new.raw_user_meta_data->>'role' in ('admin', 'teacher', 'student')
+        then new.raw_user_meta_data->>'role'
+      else 'student'
+    end
+  )
+  on conflict (id) do nothing;
+
   return new;
 end;
-$$ language plpgsql security definer;
+$$;
 
 drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
   after insert on auth.users
-  for each row execute procedure handle_new_user();
+  for each row execute procedure public.handle_new_user();
+
+grant usage on schema public to supabase_auth_admin;
+grant insert, select on public.profiles to supabase_auth_admin;
 
 -- 2. CLASSES ---------------------------------------------------
 create table if not exists classes (
