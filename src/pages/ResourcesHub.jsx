@@ -3,8 +3,9 @@ import LectureView from '../components/blocks/LectureView'
 import { BookMarked, AlertTriangle } from 'lucide-react'
 
 // Static, permanent page — not stored in module_content, so it isn't tied
-// to any module/assignment and is always reachable from the top nav for
-// every signed-in role, regardless of what's currently assigned.
+// to any module/assignment. Reached via a "References & Rubric" button on
+// each role's Modules page (Modules.jsx / MyModules.jsx / ModuleApproval.jsx)
+// rather than a top-nav tab, but the route stays open to every signed-in role.
 
 const RUBRIC_BODY = `ASSESSMENT RUBRIC — For Performance-Based Tasks
 Use this rubric to evaluate dialogue building tasks, paragraph and reflection writing, and approximation/reconstruction exercises.

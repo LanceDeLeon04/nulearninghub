@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { supabase } from '../../supabaseClient'
 import Navbar from '../../components/Navbar'
 import { haptic } from '../../lib/haptics'
-import { CheckSquare, Eye, Pencil, Trash2, X, Check } from 'lucide-react'
+import { CheckSquare, Eye, Pencil, Trash2, X, Check, BookMarked } from 'lucide-react'
 
 const STATUS_LABEL = {
   pending: 'Pending Approval',
@@ -139,7 +139,10 @@ export default function ModuleApproval() {
     <div>
       <Navbar />
       <main className="page">
-        <h1><CheckSquare size={22} /> Module Approval</h1>
+        <div className="page-header">
+          <h1><CheckSquare size={22} /> Module Approval</h1>
+          <Link className="btn btn-outline" to="/resources"><BookMarked size={15} /> References & Rubric</Link>
+        </div>
         <p className="subtitle">Manage every module application — pending, approved, and rejected — from any teacher.</p>
         {message && <div className="info-banner">{message}</div>}
 

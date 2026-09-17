@@ -5,6 +5,12 @@
 -- Adjust the email below if your teacher account differs.
 -- ==========================================================
 
+-- Safe to rerun: clears any existing "Preliminaries" module for this
+-- teacher first (module_content rows cascade-delete with it).
+DELETE FROM modules
+WHERE title = 'Preliminaries'
+  AND teacher_id = (SELECT id FROM profiles WHERE email = 'faculty1@learninghub.local');
+
 WITH prelim_module AS (
   INSERT INTO modules (title, subject, description, teacher_id, status, sequence_order)
   VALUES (

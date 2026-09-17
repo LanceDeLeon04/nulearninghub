@@ -4,7 +4,7 @@ import { supabase } from '../../supabaseClient'
 import { useAuth } from '../../context/AuthContext'
 import Navbar from '../../components/Navbar'
 import RingProgress from '../../components/RingProgress'
-import { BookOpen, Crown, Sparkles } from 'lucide-react'
+import { BookOpen, Crown, Sparkles, BookMarked } from 'lucide-react'
 
 const SUBJECT_EMOJI = {
   math: '📐', mathematics: '📐',
@@ -115,13 +115,16 @@ export default function MyModules() {
       <main className="page">
         <div className="page-header">
           <h1><BookOpen size={22} /> My Modules</h1>
-          {assignments.length > 0 && (
-            <p className="subtitle" style={{ margin: 0 }}>
-              {finishedCount === assignments.length
-                ? '🎉 All caught up — great work!'
-                : `${finishedCount} of ${assignments.length} finished`}
-            </p>
-          )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            {assignments.length > 0 && (
+              <p className="subtitle" style={{ margin: 0 }}>
+                {finishedCount === assignments.length
+                  ? '🎉 All caught up — great work!'
+                  : `${finishedCount} of ${assignments.length} finished`}
+              </p>
+            )}
+            <Link className="btn btn-outline" to="/resources"><BookMarked size={15} /> References & Rubric</Link>
+          </div>
         </div>
         <div className="card-grid">
           {assignments.map((a) => {

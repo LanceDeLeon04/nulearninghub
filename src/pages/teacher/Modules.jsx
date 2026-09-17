@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../../supabaseClient'
 import Navbar from '../../components/Navbar'
-import { BookOpen, Eye, GraduationCap } from 'lucide-react'
+import { BookOpen, Eye, GraduationCap, BookMarked } from 'lucide-react'
 
 export default function Modules() {
   const [modules, setModules] = useState([])
@@ -29,6 +29,7 @@ export default function Modules() {
           <h1><BookOpen size={22} /> Modules</h1>
           <div style={{ display: 'flex', gap: '0.5rem' }}>
             <Link className="btn btn-outline" to="/teacher/teachers-guide"><GraduationCap size={15} /> Teacher's Guide</Link>
+            <Link className="btn btn-outline" to="/resources"><BookMarked size={15} /> References & Rubric</Link>
             <Link className="btn" to="/teacher/add-module">+ Add Module</Link>
           </div>
         </div>

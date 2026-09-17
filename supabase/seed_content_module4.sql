@@ -18,6 +18,12 @@
 -- platform, so it is seeded as an open-ended writing prompt instead.
 -- ==========================================================
 
+-- Safe to rerun: clears any existing "Module 4: Strategic Competence"
+-- module for this teacher first (module_content rows cascade-delete with it).
+DELETE FROM modules
+WHERE title = 'Module 4: Strategic Competence'
+  AND teacher_id = (SELECT id FROM profiles WHERE email = 'faculty1@learninghub.local');
+
 WITH mod4 AS (
   INSERT INTO modules (title, subject, description, teacher_id, status, sequence_order)
   VALUES (

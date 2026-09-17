@@ -15,7 +15,6 @@ import {
   Users,
   UserPlus,
   MessageSquare,
-  BookMarked,
   LogOut,
 } from 'lucide-react'
 
@@ -26,21 +25,18 @@ const NAV_LINKS = {
     { to: '/teacher/modules', label: 'Modules', icon: BookOpen },
     { to: '/teacher/assign-module', label: 'Assign Module', icon: ClipboardList },
     { to: '/teacher/add-module', label: 'Add Module', icon: FilePlus2 },
-    { to: '/resources', label: 'References & Rubric', icon: BookMarked },
   ],
   student: [
     { to: '/student', label: 'Dashboard', icon: LayoutDashboard },
     { to: '/student/my-modules', label: 'My Modules', icon: BookOpen },
     { to: '/student/leaderboard', label: 'Leaderboard', icon: Trophy },
     { to: '/student/my-badges', label: 'My Badges', icon: Award },
-    { to: '/resources', label: 'References & Rubric', icon: BookMarked },
   ],
   admin: [
     { to: '/admin', label: 'Dashboard', icon: LayoutDashboard },
     { to: '/admin/module-approval', label: 'Module Approval', icon: CheckSquare },
     { to: '/admin/class-management', label: 'Class Management', icon: Users },
     { to: '/admin/create-accounts', label: 'Create Accounts', icon: UserPlus },
-    { to: '/resources', label: 'References & Rubric', icon: BookMarked },
   ],
 }
 
