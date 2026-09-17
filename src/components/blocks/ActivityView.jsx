@@ -37,14 +37,34 @@ function MatchingQuestion({ question, value, onAnswer, locked }) {
   )
 }
 
+// Whether a single question currently has a real answer, per its type.
+// Used both to block submission and to highlight what's still missing.
+function isAnswered(question, value) {
+  switch (question.type) {
+    case 'multiple_choice':
+      return typeof value === 'number'
+    case 'true_false':
+      // false is a valid, deliberate answer — only "never touched" (undefined) counts as unanswered.
+      return value === true || value === false
+    case 'short_answer':
+      return typeof value === 'string' && value.trim().length > 0
+    case 'matching':
+      return !!value && question.pairs.every((_, i) => value[i] !== undefined)
+    default:
+      return value !== undefined && value !== null && value !== ''
+  }
+}
+
 export default function ActivityView({ data, progress, onSubmit, readOnly = false, pairing = null }) {
   const questions = data.questions ?? []
+  const requireAllAnswered = data.requireAllAnswered ?? true
   const alreadySubmitted = progress?.completed ?? false
   const [responses, setResponses] = useState(progress?.response ?? {})
   const [result, setResult] = useState(
     alreadySubmitted ? { score: progress.score, maxScore: progress.max_score, correctByQuestion: null } : null
   )
   const [justSubmitted, setJustSubmitted] = useState(false)
+  const [showMissingWarning, setShowMissingWarning] = useState(false)
 
   const isPairMode = data.mode === 'pair'
   // Not yet paired and there's actually something to gate on (student view,
@@ -54,13 +74,25 @@ export default function ActivityView({ data, progress, onSubmit, readOnly = fals
     return <PairRequestPanel pairing={pairing} />
   }
 
+  const unansweredIds = new Set(
+    questions.filter((q) => !isAnswered(q, responses[q.id])).map((q) => q.id)
+  )
+
   function setAnswer(qid, value) {
     if (readOnly) return
     setResponses((prev) => ({ ...prev, [qid]: value }))
+    setShowMissingWarning(false)
   }
 
   function handleSubmit() {
     if (readOnly) return
+    if (requireAllAnswered && unansweredIds.size > 0) {
+      // Don't silently no-op — tell the student what's left, and point them
+      // at it, rather than leaving them wondering why nothing happened.
+      haptic('error')
+      setShowMissingWarning(true)
+      return
+    }
     haptic('tap')
     const graded = gradeActivity(questions, responses)
     setResult({ score: graded.score, maxScore: graded.maxScore, correctByQuestion: graded.correctByQuestion })
@@ -81,7 +113,7 @@ export default function ActivityView({ data, progress, onSubmit, readOnly = fals
         return (
         <div
           key={q.id}
-          className={`activity-question${locked ? (isCorrect ? ' activity-question-correct' : ' activity-question-incorrect') : ''}${justSubmitted ? ' reveal-pop' : ''}`}
+          className={`activity-question${locked ? (isCorrect ? ' activity-question-correct' : ' activity-question-incorrect') : ''}${justSubmitted ? ' reveal-pop' : ''}${!locked && showMissingWarning && unansweredIds.has(q.id) ? ' activity-question-missing' : ''}`}
           style={justSubmitted ? { animationDelay: `${qi * 60}ms` } : undefined}
         >
           <p className="question-prompt">
@@ -90,6 +122,9 @@ export default function ActivityView({ data, progress, onSubmit, readOnly = fals
               isCorrect
                 ? <CheckCircle2 size={16} className="answer-correct-icon" style={{ marginLeft: '0.4rem', verticalAlign: '-3px' }} />
                 : <XCircle size={16} className="answer-incorrect-icon" style={{ marginLeft: '0.4rem', verticalAlign: '-3px' }} />
+            )}
+            {!locked && showMissingWarning && unansweredIds.has(q.id) && (
+              <span className="badge status-rejected" style={{ marginLeft: '0.5rem' }}>Answer needed</span>
             )}
           </p>
 
@@ -139,6 +174,11 @@ export default function ActivityView({ data, progress, onSubmit, readOnly = fals
       )})}
 
       <div className="block-view-footer">
+        {!locked && showMissingWarning && unansweredIds.size > 0 && (
+          <p className="muted small" style={{ color: 'var(--danger, #dc2626)', width: '100%' }}>
+            Please answer {unansweredIds.size === 1 ? 'the highlighted question' : `all ${unansweredIds.size} highlighted questions`} before submitting.
+          </p>
+        )}
         {!locked && questions.length > 0 && (
           <button onClick={handleSubmit}><Send size={15} /> Submit Activity</button>
         )}

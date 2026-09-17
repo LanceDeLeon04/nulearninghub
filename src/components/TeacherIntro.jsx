@@ -10,6 +10,7 @@ import { celebrate } from '../lib/confetti'
 export default function TeacherIntro({
   teacherName = 'Your Teacher',
   emoji = '🧑‍🏫',
+  portraitSrc = null,
   lines,
   onFinish,
 }) {
@@ -63,7 +64,11 @@ export default function TeacherIntro({
         </div>
 
         <div className="teacher-intro-portrait">
-          <div className="teacher-intro-portrait-circle" aria-hidden="true">{emoji}</div>
+          <div className="teacher-intro-portrait-circle" aria-hidden="true">
+            {portraitSrc
+              ? <img src={portraitSrc} alt="" className="teacher-intro-portrait-img" />
+              : emoji}
+          </div>
         </div>
       </div>
     </div>

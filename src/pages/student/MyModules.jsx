@@ -50,14 +50,27 @@ export default function MyModules() {
 
       const { data, error } = await supabase
         .from('module_assignments')
-        .select('id, due_date, module_id, modules ( title, subject, description ), classes ( name )')
+        .select('id, due_date, module_id, modules ( title, subject, description, sequence_order ), classes ( name )')
         .in('class_id', classIds)
-        .order('due_date', { ascending: true, nullsFirst: false })
 
       if (error || !data) {
         setAssignments([])
         return
       }
+
+      // Always follow the curriculum position the teacher set
+      // (Preliminaries, Module 1, Module 2, ...), not the due date or
+      // whatever order Postgres happened to return rows in. Due date only
+      // breaks ties between modules that share (or lack) a sequence_order.
+      data.sort((a, b) => {
+        const seqA = a.modules?.sequence_order ?? 0
+        const seqB = b.modules?.sequence_order ?? 0
+        if (seqA !== seqB) return seqA - seqB
+        if (!a.due_date && !b.due_date) return 0
+        if (!a.due_date) return 1
+        if (!b.due_date) return -1
+        return new Date(a.due_date) - new Date(b.due_date)
+      })
 
       const assignmentIds = data.map((a) => a.id)
       const moduleIds = [...new Set(data.map((a) => a.module_id))]

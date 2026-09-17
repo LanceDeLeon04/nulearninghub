@@ -205,6 +205,18 @@ export default function ActivityEditor({ data, onChange }) {
         </p>
       )}
 
+      <label className="checkbox-row">
+        <input
+          type="checkbox"
+          checked={data.requireAllAnswered ?? true}
+          onChange={(e) => onChange({ ...data, requireAllAnswered: e.target.checked })}
+        />
+        Require every question to be answered before submitting
+      </label>
+      {data.requireAllAnswered === false && (
+        <p className="muted small">Students will be able to submit with questions left blank — those score as incorrect.</p>
+      )}
+
       {questions.map((q, i) => (
         <QuestionEditor
           key={q.id}

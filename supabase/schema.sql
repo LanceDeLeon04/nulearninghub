@@ -293,8 +293,15 @@ create table if not exists module_content (
   type text not null check (type in ('lecture', 'activity', 'interactive')),
   title text not null,
   data jsonb not null default '{}'::jsonb,
+  -- When true (the default), a student must finish this block — read it,
+  -- submit it, or complete the interaction, depending on type — before the
+  -- player lets them move on to the next block. When false, Next is always
+  -- available, e.g. for optional/supplementary content.
+  require_completion boolean not null default true,
   created_at timestamptz not null default now()
 );
+-- Safe to re-run against an existing database that predates this column.
+alter table module_content add column if not exists require_completion boolean not null default true;
 
 -- 8. STUDENT_PROGRESS ------------------------------------------------
 -- One row per student, per content block, per class assignment. Stores

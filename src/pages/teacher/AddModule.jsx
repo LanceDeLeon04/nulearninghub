@@ -16,6 +16,7 @@ export default function AddModule() {
   const [title, setTitle] = useState('')
   const [subject, setSubject] = useState('')
   const [description, setDescription] = useState('')
+  const [sequenceOrder, setSequenceOrder] = useState('')
   const [message, setMessage] = useState('')
   const [mySubmissions, setMySubmissions] = useState([])
 
@@ -24,8 +25,13 @@ export default function AddModule() {
       .from('modules')
       .select('*')
       .eq('teacher_id', user.id)
-      .order('created_at', { ascending: false })
+      .order('sequence_order', { ascending: true })
     setMySubmissions(data ?? [])
+    // Default the next module to slot in right after the last one in the
+    // curriculum, instead of the column's default of 0 (which is what put
+    // every module in the same undifferentiated bucket in the first place).
+    const maxSeq = (data ?? []).reduce((max, m) => Math.max(max, m.sequence_order ?? 0), 0)
+    setSequenceOrder(String(maxSeq + 1))
   }
 
   useEffect(() => {
@@ -40,6 +46,7 @@ export default function AddModule() {
       title,
       subject,
       description,
+      sequence_order: Number(sequenceOrder) || 0,
       teacher_id: user.id,
       status: 'pending', // all new modules require admin approval
     })
@@ -75,6 +82,17 @@ export default function AddModule() {
               Subject
               <input value={subject} onChange={(e) => setSubject(e.target.value)} required />
             </label>
+            <label>
+              Curriculum Position
+              <input
+                type="number"
+                min="0"
+                value={sequenceOrder}
+                onChange={(e) => setSequenceOrder(e.target.value)}
+                required
+              />
+              <span className="muted small">Where this falls in the sequence — e.g. 0 for Preliminaries, 1 for Module 1, 2 for Module 2. Controls the order students see modules in.</span>
+            </label>
             <label className="form-span-full">
               Description
               <textarea
@@ -94,6 +112,7 @@ export default function AddModule() {
             <tr>
               <th>Title</th>
               <th>Subject</th>
+              <th>Position</th>
               <th>Status</th>
               <th>Submitted</th>
               <th></th>
@@ -104,6 +123,7 @@ export default function AddModule() {
               <tr key={m.id}>
                 <td>{m.title}</td>
                 <td>{m.subject}</td>
+                <td>{m.sequence_order}</td>
                 <td><span className={`badge status-${m.status}`}>{STATUS_LABEL[m.status] ?? m.status}</span></td>
                 <td>{new Date(m.created_at).toLocaleDateString()}</td>
                 <td><Link className="btn" to={`/teacher/module-builder/${m.id}`}>Build Content</Link></td>

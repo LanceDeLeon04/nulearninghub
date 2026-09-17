@@ -12,6 +12,12 @@ import TeacherIntro from '../../components/TeacherIntro'
 import { haptic } from '../../lib/haptics'
 import { celebrate } from '../../lib/confetti'
 import { ArrowLeft, ArrowRight, Loader2, Sparkles } from 'lucide-react'
+import maamLinPortrait from '../../assets/maam-lin-portrait.png'
+
+// Preliminaries always introduces itself as Miss Lin, regardless of which
+// teacher actually authored or assigned the module — she's the face of the
+// onboarding experience for every class, not a per-teacher thing.
+const PRELIMINARIES_TEACHER_NAME = 'Miss Lin'
 
 // Preliminaries is the very first module every student sees, so it's the
 // one place we show a short "meet your teacher" welcome before the content.
@@ -59,6 +65,18 @@ export default function ModulePlayer() {
     return Math.max(1, Math.round((Date.now() - blockStartRef.current) / 1000))
   }
 
+  // True when the block at `index` still requires the student to finish it
+  // (mark as read / submit / complete) before moving to anything ahead of it.
+  // require_completion defaults to true at the database level, so a block
+  // with no value set (e.g. rows created before this feature) is still
+  // treated as required — the safer default for "don't let students skip".
+  function requiresCompletionGate(index) {
+    const b = blocks[index]
+    if (!b) return false
+    const required = b.require_completion ?? true
+    return required && !progressByBlock[b.id]?.completed
+  }
+
   async function loadAll() {
     setLoading(true)
     const { data: a } = await supabase
@@ -68,13 +86,15 @@ export default function ModulePlayer() {
       .single()
     setAssignment(a)
 
-    if (a?.modules?.teacher_id) {
+    if (a?.modules?.teacher_id && !isPreliminariesModule(a.modules?.title)) {
       const { data: teacherProfile } = await supabase
         .from('profiles')
         .select('full_name')
         .eq('id', a.modules.teacher_id)
         .single()
       if (teacherProfile?.full_name) setTeacherName(teacherProfile.full_name)
+    } else if (isPreliminariesModule(a?.modules?.title)) {
+      setTeacherName(PRELIMINARIES_TEACHER_NAME)
     }
 
     if (a?.module_id && isPreliminariesModule(a.modules?.title)) {
@@ -339,7 +359,11 @@ export default function ModulePlayer() {
     <div>
       <Navbar />
       {showIntro && (
-        <TeacherIntro teacherName={teacherName} onFinish={dismissIntro} />
+        <TeacherIntro
+          teacherName={teacherName}
+          portraitSrc={preliminaries ? maamLinPortrait : null}
+          onFinish={dismissIntro}
+        />
       )}
       <main className="page">
         <div className="page-header">
@@ -352,7 +376,7 @@ export default function ModulePlayer() {
 
         {preliminaries && !showIntro && (
           <button type="button" className="teacher-intro-replay" onClick={() => setShowIntro(true)}>
-            <Sparkles size={13} /> Meet {teacherName.split(' ')[0]} again
+            <Sparkles size={13} /> Meet {teacherName} again
           </button>
         )}
 
@@ -366,16 +390,25 @@ export default function ModulePlayer() {
         {totalBlocks > 0 && (
           <>
             <div className="stepper">
-              {blocks.map((b, i) => (
-                <button
-                  key={b.id}
-                  type="button"
-                  className={`stepper-btn${i === current ? ' stepper-btn-active' : ''}${progressByBlock[b.id]?.completed ? ' stepper-btn-done' : ''}`}
-                  onClick={() => { haptic('tap'); setCurrent(i) }}
-                >
-                  <BlockIcon type={b.type} size={13} /> {i + 1}
-                </button>
-              ))}
+              {blocks.map((b, i) => {
+                // A student can always revisit a block they've already reached
+                // (backward, or one they finished). Moving to a block *ahead*
+                // of an unfinished, required block is what we block — that's
+                // the "skip the activity" case this whole feature exists for.
+                const isLocked = i > current && requiresCompletionGate(current)
+                return (
+                  <button
+                    key={b.id}
+                    type="button"
+                    className={`stepper-btn${i === current ? ' stepper-btn-active' : ''}${progressByBlock[b.id]?.completed ? ' stepper-btn-done' : ''}${isLocked ? ' stepper-btn-locked' : ''}`}
+                    onClick={() => { if (!isLocked) { haptic('tap'); setCurrent(i) } }}
+                    disabled={isLocked}
+                    title={isLocked ? 'Finish the current activity first' : undefined}
+                  >
+                    <BlockIcon type={b.type} size={13} /> {i + 1}
+                  </button>
+                )
+              })}
             </div>
 
             <div className="module-card" style={{ marginTop: '1rem' }}>
@@ -403,8 +436,23 @@ export default function ModulePlayer() {
 
             <div className="row-actions" style={{ marginTop: '1rem' }}>
               <button className="btn" disabled={current === 0} onClick={() => { haptic('tap'); setCurrent((c) => c - 1) }}><ArrowLeft size={15} /> Previous</button>
-              <button className="btn" disabled={current === blocks.length - 1} onClick={() => { haptic('tap'); setCurrent((c) => c + 1) }}>Next <ArrowRight size={15} /></button>
+              <button
+                className="btn"
+                disabled={current === blocks.length - 1 || requiresCompletionGate(current)}
+                onClick={() => { haptic('tap'); setCurrent((c) => c + 1) }}
+              >
+                Next <ArrowRight size={15} />
+              </button>
             </div>
+            {requiresCompletionGate(current) && current < blocks.length - 1 && (
+              <p className="muted small" style={{ marginTop: '0.4rem' }}>
+                {block.type === 'lecture'
+                  ? 'Mark this as read to continue to the next section.'
+                  : block.type === 'activity'
+                    ? 'Submit this activity to continue to the next section.'
+                    : 'Complete this to continue to the next section.'}
+              </p>
+            )}
           </>
         )}
       </main>

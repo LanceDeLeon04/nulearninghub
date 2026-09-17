@@ -48,7 +48,7 @@ export default function ModuleBuilder() {
 
   function selectBlock(block) {
     setSelectedId(block.id)
-    setDraft({ title: block.title, data: block.data })
+    setDraft({ title: block.title, data: block.data, requireCompletion: block.require_completion ?? true })
     setMessage('')
   }
 
@@ -78,7 +78,7 @@ export default function ModuleBuilder() {
     setSaving(true)
     const { error } = await supabase
       .from('module_content')
-      .update({ title: draft.title, data: draft.data })
+      .update({ title: draft.title, data: draft.data, require_completion: draft.requireCompletion })
       .eq('id', selectedId)
     setSaving(false)
     if (error) {
@@ -113,6 +113,12 @@ export default function ModuleBuilder() {
   }
 
   const Editor = draft && selectedId ? EDITORS[blocks.find((b) => b.id === selectedId)?.type] : null
+  const selectedType = selectedId ? blocks.find((b) => b.id === selectedId)?.type : null
+  const REQUIRE_LABEL = {
+    lecture: 'Student must mark this as read before moving on',
+    activity: 'Student must submit this activity before moving on',
+    interactive: 'Student must complete this before moving on',
+  }
 
   return (
     <div>
@@ -165,6 +171,19 @@ export default function ModuleBuilder() {
                   <input value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} />
                 </label>
                 {Editor && <Editor data={draft.data} onChange={(data) => setDraft({ ...draft, data })} context={{ moduleId, blockId: selectedId }} />}
+                <label className="checkbox-row" style={{ marginTop: '0.75rem' }}>
+                  <input
+                    type="checkbox"
+                    checked={draft.requireCompletion}
+                    onChange={(e) => setDraft({ ...draft, requireCompletion: e.target.checked })}
+                  />
+                  {REQUIRE_LABEL[selectedType] ?? 'Student must complete this before moving on'}
+                </label>
+                {!draft.requireCompletion && (
+                  <p className="muted small" style={{ marginTop: '0.25rem' }}>
+                    Students will be able to click Next without finishing this block.
+                  </p>
+                )}
                 <button onClick={handleSaveDraft} disabled={saving}>{saving ? 'Saving…' : 'Save Block'}</button>
               </div>
             )}
