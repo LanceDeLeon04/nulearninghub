@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Play, Pause, Square, Volume2 } from 'lucide-react'
 import { haptic } from '../lib/haptics'
+import { createCalmUtterance } from '../lib/voice'
 
 // Play / Pause / Stop controls that read the given text aloud using the
 // browser's built-in speech synthesis. No external service or API key
@@ -40,8 +41,7 @@ export default function ReadAloud({ text }) {
     }
 
     synth.cancel()
-    const utterance = new SpeechSynthesisUtterance(text)
-    utterance.rate = 1
+    const utterance = createCalmUtterance(text)
     utterance.onend = () => setState('idle')
     utterance.onerror = () => setState('idle')
     utteranceRef.current = utterance

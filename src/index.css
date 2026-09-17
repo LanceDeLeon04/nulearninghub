@@ -787,11 +787,21 @@ input:focus, select:focus, textarea:focus {
 }
 .teacher-intro-next-btn:hover { transform: translateY(-2px) scale(1.02); box-shadow: 0 10px 22px rgba(255,199,44,0.5); }
 .teacher-intro-skip {
-  position: absolute; top: -2.6rem; right: 0.2rem;
   background: transparent; border: none; color: rgba(255,255,255,0.75);
   font-size: 0.8rem; font-weight: 600; cursor: pointer; text-decoration: underline;
 }
 .teacher-intro-skip:hover { color: #fff; }
+.teacher-intro-topbar {
+  position: absolute; top: -2.6rem; right: 0.2rem;
+  display: flex; align-items: center; gap: 0.9rem;
+}
+.teacher-intro-mute {
+  display: flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; border-radius: 50%;
+  background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.3);
+  color: rgba(255,255,255,0.9); cursor: pointer; padding: 0;
+}
+.teacher-intro-mute:hover { background: rgba(255,255,255,0.22); color: #fff; }
 .teacher-intro-replay {
   display: inline-flex; align-items: center; gap: 0.4rem;
   background: var(--glass-bg); border: 1px solid var(--glass-border-card);

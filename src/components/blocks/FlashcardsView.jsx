@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { CheckCircle2 } from 'lucide-react'
 import { haptic } from '../../lib/haptics'
+import ReadAloud from '../ReadAloud'
 
 export default function FlashcardsView({ data, progress, onComplete }) {
   const cards = data.cards ?? []
@@ -34,6 +35,9 @@ export default function FlashcardsView({ data, progress, onComplete }) {
         </div>
       </div>
       <p className="muted small">Tap the card to flip it.</p>
+      {/* key forces a fresh ReadAloud (and cancels any in-flight speech)
+          whenever the card or its flipped side changes. */}
+      <ReadAloud key={`${index}-${flipped}`} text={flipped ? card.back : card.front} />
       <div className="block-view-footer">
         <button onClick={next}>{onLastCard ? 'Finish' : 'Next Card'}</button>
         {completed && <span className="badge status-approved"><CheckCircle2 size={13} /> Reviewed</span>}

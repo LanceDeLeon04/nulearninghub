@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { CheckCircle2 } from 'lucide-react'
 import { haptic } from '../../lib/haptics'
+import ReadAloud from '../ReadAloud'
 
 export default function HotspotsView({ data, progress, onComplete }) {
   const hotspots = data.hotspots ?? []
@@ -46,6 +47,7 @@ export default function HotspotsView({ data, progress, onComplete }) {
         <div className="hotspot-popup">
           <strong>{active.label || 'Untitled'}</strong>
           <p>{active.description}</p>
+          {active.description && <ReadAloud key={active.id} text={active.description} />}
         </div>
       )}
       <div className="block-view-footer">

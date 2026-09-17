@@ -3,6 +3,7 @@ import { gradeActivity, shuffle } from '../../lib/blockTypes'
 import { ArrowLeftRight, Send, Award, CheckCircle2, XCircle } from 'lucide-react'
 import { haptic } from '../../lib/haptics'
 import PairRequestPanel, { PairedBanner } from '../PairRequestPanel'
+import ReadAloud from '../ReadAloud'
 
 function MatchingQuestion({ question, value, onAnswer, locked }) {
   const shuffledRights = useMemo(
@@ -107,6 +108,7 @@ export default function ActivityView({ data, progress, onSubmit, readOnly = fals
       {isPairMode && pairing?.partner && <PairedBanner partnerName={pairing.partner.full_name} />}
       {isPairMode && !pairing && alreadySubmitted && <PairedBanner partnerName="your partner" />}
       {data.instructions && <p className="muted activity-instructions">{data.instructions}</p>}
+      {data.instructions && <ReadAloud text={data.instructions} />}
 
       {questions.map((q, qi) => {
         const isCorrect = result?.correctByQuestion ? result.correctByQuestion[q.id] : null

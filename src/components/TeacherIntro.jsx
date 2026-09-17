@@ -1,7 +1,10 @@
-import { useState } from 'react'
-import { ChevronRight, PartyPopper } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { ChevronRight, PartyPopper, Volume2, VolumeX } from 'lucide-react'
 import { haptic } from '../lib/haptics'
 import { celebrate } from '../lib/confetti'
+import { createCalmUtterance, isSpeechSupported } from '../lib/voice'
+
+const MUTE_KEY = 'lh_teacher_intro_muted'
 
 // A short, skippable "visual novel" style welcome from the teacher, shown
 // before a student dives into the Preliminaries module. Purely front-end —
@@ -22,11 +25,43 @@ export default function TeacherIntro({
 
   const [step, setStep] = useState(0)
   const isLast = step === dialogue.length - 1
+  const speechSupported = isSpeechSupported()
+  const [muted, setMuted] = useState(() => {
+    if (typeof window === 'undefined') return false
+    return localStorage.getItem(MUTE_KEY) === '1'
+  })
+
+  // Auto-read each line aloud, in a calm female voice, as it appears — this
+  // is the whole point of the intro being narrated rather than just read.
+  // Re-runs whenever the line changes or the student (un)mutes.
+  useEffect(() => {
+    if (!speechSupported || muted) return
+    const synth = window.speechSynthesis
+    synth.cancel()
+    synth.speak(createCalmUtterance(dialogue[step]))
+    return () => synth.cancel()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, muted])
+
+  function stopSpeaking() {
+    if (speechSupported) window.speechSynthesis.cancel()
+  }
+
+  function toggleMute() {
+    haptic('tap')
+    setMuted((m) => {
+      const nextMuted = !m
+      if (typeof window !== 'undefined') localStorage.setItem(MUTE_KEY, nextMuted ? '1' : '0')
+      if (nextMuted) stopSpeaking()
+      return nextMuted
+    })
+  }
 
   function next() {
     if (isLast) {
       haptic('celebrate')
       celebrate()
+      stopSpeaking()
       onFinish?.()
       return
     }
@@ -36,13 +71,27 @@ export default function TeacherIntro({
 
   function skip() {
     haptic('tap')
+    stopSpeaking()
     onFinish?.()
   }
 
   return (
     <div className="teacher-intro-backdrop" role="dialog" aria-modal="true" aria-label={`Introduction from ${teacherName}`}>
       <div className="teacher-intro-stage">
-        <button type="button" className="teacher-intro-skip" onClick={skip}>Skip intro</button>
+        <div className="teacher-intro-topbar">
+          {speechSupported && (
+            <button
+              type="button"
+              className="teacher-intro-mute"
+              onClick={toggleMute}
+              aria-label={muted ? 'Turn narration on' : 'Turn narration off'}
+              title={muted ? 'Turn narration on' : 'Turn narration off'}
+            >
+              {muted ? <VolumeX size={15} /> : <Volume2 size={15} />}
+            </button>
+          )}
+          <button type="button" className="teacher-intro-skip" onClick={skip}>Skip intro</button>
+        </div>
 
         <div className="teacher-intro-bubble">
           <div>
