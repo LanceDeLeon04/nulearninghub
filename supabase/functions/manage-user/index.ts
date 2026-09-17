@@ -19,7 +19,21 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!
 const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 
+// The browser sends a CORS preflight (OPTIONS) before every cross-origin
+// POST. It carries no Authorization header, so it must be answered here —
+// before any auth check — or the browser never gets to send the real
+// request and every call fails with 401 on the OPTIONS request itself.
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+}
+
 serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders })
+  }
+
   try {
     const authHeader = req.headers.get('Authorization') ?? ''
     const callerClient = createClient(supabaseUrl, serviceRoleKey, {
@@ -29,7 +43,7 @@ serve(async (req) => {
     // Identify the calling user and confirm they are an admin.
     const { data: { user }, error: userError } = await callerClient.auth.getUser()
     if (userError || !user) {
-      return new Response(JSON.stringify({ error: 'Not authenticated' }), { status: 401 })
+      return new Response(JSON.stringify({ error: 'Not authenticated' }), { status: 401, headers: corsHeaders })
     }
 
     const { data: callerProfile } = await callerClient
@@ -39,13 +53,13 @@ serve(async (req) => {
       .single()
 
     if (callerProfile?.role !== 'admin') {
-      return new Response(JSON.stringify({ error: 'Only admins can manage accounts' }), { status: 403 })
+      return new Response(JSON.stringify({ error: 'Only admins can manage accounts' }), { status: 403, headers: corsHeaders })
     }
 
     const body = await req.json()
     const { action, user_id } = body
     if (!user_id) {
-      return new Response(JSON.stringify({ error: 'user_id is required' }), { status: 400 })
+      return new Response(JSON.stringify({ error: 'user_id is required' }), { status: 400, headers: corsHeaders })
     }
 
     const adminClient = createClient(supabaseUrl, serviceRoleKey)
@@ -60,7 +74,7 @@ serve(async (req) => {
       .single()
 
     if (!targetProfile || !['teacher', 'student'].includes(targetProfile.role)) {
-      return new Response(JSON.stringify({ error: 'Target account not found or not editable here' }), { status: 400 })
+      return new Response(JSON.stringify({ error: 'Target account not found or not editable here' }), { status: 400, headers: corsHeaders })
     }
 
     if (action === 'delete') {
@@ -69,9 +83,9 @@ serve(async (req) => {
       // — see schema.sql "on delete cascade").
       const { error } = await adminClient.auth.admin.deleteUser(user_id)
       if (error) {
-        return new Response(JSON.stringify({ error: error.message }), { status: 400 })
+        return new Response(JSON.stringify({ error: error.message }), { status: 400, headers: corsHeaders })
       }
-      return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
     if (action === 'update') {
@@ -84,7 +98,7 @@ serve(async (req) => {
       if (Object.keys(authUpdate).length > 0) {
         const { error: authError } = await adminClient.auth.admin.updateUserById(user_id, authUpdate)
         if (authError) {
-          return new Response(JSON.stringify({ error: authError.message }), { status: 400 })
+          return new Response(JSON.stringify({ error: authError.message }), { status: 400, headers: corsHeaders })
         }
       }
 
@@ -97,15 +111,15 @@ serve(async (req) => {
       if (Object.keys(profileUpdate).length > 0) {
         const { error: profileError } = await adminClient.from('profiles').update(profileUpdate).eq('id', user_id)
         if (profileError) {
-          return new Response(JSON.stringify({ error: profileError.message }), { status: 400 })
+          return new Response(JSON.stringify({ error: profileError.message }), { status: 400, headers: corsHeaders })
         }
       }
 
-      return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
-    return new Response(JSON.stringify({ error: 'Unknown action' }), { status: 400 })
+    return new Response(JSON.stringify({ error: 'Unknown action' }), { status: 400, headers: corsHeaders })
   } catch (err) {
-    return new Response(JSON.stringify({ error: String(err) }), { status: 500 })
+    return new Response(JSON.stringify({ error: String(err) }), { status: 500, headers: corsHeaders })
   }
 })

@@ -1,0 +1,12 @@
+# Both create-user and manage-user verify the caller themselves (they check
+# the forwarded Authorization header, resolve the user, and require
+# role='admin' before doing anything). The platform's own JWT gate runs
+# *before* the function code and does not exempt OPTIONS on all setups,
+# which causes the browser's CORS preflight to be rejected with 401 before
+# it ever reaches our code. Disabling it here is safe because the function
+# body still fully authenticates and authorizes every request.
+[functions.create-user]
+verify_jwt = false
+
+[functions.manage-user]
+verify_jwt = false
