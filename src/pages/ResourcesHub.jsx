@@ -1,6 +1,6 @@
 import Navbar from '../components/Navbar'
 import LectureView from '../components/blocks/LectureView'
-import { BookMarked, AlertTriangle } from 'lucide-react'
+import { BookMarked } from 'lucide-react'
 
 // Static, permanent page — not stored in module_content, so it isn't tied
 // to any module/assignment. Reached via a "References & Rubric" button on
@@ -40,13 +40,21 @@ Coherence and Organization
 - Satisfactory (2): Inconsistent organization
 - Needs Improvement (1): Disorganized or lacks logical flow`
 
-// No reference list ever existed in the original source material — the
-// old Table of Contents just had a "References" heading with nothing
-// underneath it. Leaving this as an honest placeholder rather than
-// inventing citations.
-const REFERENCES_BODY = `A reference list has not been added yet.
+// The reference list from the source material's "Final References and Key
+// to Correction" document, in APA order.
+const REFERENCES_BODY = `Bachman, L. F. (1990). Fundamental considerations in language testing. Oxford University Press.
 
-Once you have the source citations, replace this placeholder with the full reference list.`
+Canale, M. (1983). From communicative competence to communicative language pedagogy. In J. C. Richards & R. W. Schmidt (Eds.), Language and communication (pp. 2-27). Longman.
+
+Canale, M., & Swain, M. (1980). Theoretical bases of communicative approaches to second language teaching and testing. Applied Linguistics, 1(1), 1-47.
+
+Celce-Murcia, M., Dornyei, Z., & Thurrell, S. (1995). Communicative competence: A pedagogically motivated model with content specifications. Issues in Applied Linguistics, 6(2), 5-35.
+
+Hymes, D. (1972). On communicative competence. In J. B. Pride & J. Holmes (Eds.), Sociolinguistics (pp. 269-293). Penguin Books.
+
+Richards, J. C. (2006). Communicative language teaching today. Cambridge University Press.
+
+Savignon, S. J. (2002). Interpreting communicative language teaching: Contexts and concerns in teacher education. Yale University Press.`
 
 export default function ResourcesHub() {
   return (
@@ -65,9 +73,6 @@ export default function ResourcesHub() {
 
         <div className="module-card" style={{ marginTop: '1rem' }}>
           <h3>References</h3>
-          <div className="info-banner">
-            <AlertTriangle size={15} /> Placeholder — no source citations were included in the original material.
-          </div>
           <LectureView data={{ body: REFERENCES_BODY, readAloudEnabled: false }} progress={null} onComplete={() => {}} readOnly />
         </div>
       </main>

@@ -9,9 +9,11 @@ import ActivityView from '../../components/blocks/ActivityView'
 import InteractiveView from '../../components/blocks/InteractiveView'
 import BlockIcon from '../../components/BlockIcon'
 import TeacherIntro from '../../components/TeacherIntro'
+import RingProgress from '../../components/RingProgress'
 import { haptic } from '../../lib/haptics'
 import { celebrate } from '../../lib/confetti'
-import { ArrowLeft, ArrowRight, Loader2, Sparkles } from 'lucide-react'
+import { groupBySubModule, flattenGroups, groupProgress, unlockedThrough } from '../../lib/subModules'
+import { ArrowLeft, ArrowRight, Loader2, Sparkles, Lock, ChevronDown, CheckCircle2 } from 'lucide-react'
 import maamLinPortrait from '../../assets/maam-lin-portrait.png'
 
 // Preliminaries always introduces itself as Miss Lin, regardless of which
@@ -37,7 +39,9 @@ export default function ModulePlayer() {
   const { assignmentId } = useParams()
   const { user } = useAuth()
   const [assignment, setAssignment] = useState(null)
-  const [blocks, setBlocks] = useState([])
+  const [rawBlocks, setRawBlocks] = useState([])
+  const [subModules, setSubModules] = useState([])
+  const [openGroup, setOpenGroup] = useState(0)
   const [progressByBlock, setProgressByBlock] = useState({}) // content_id -> row
   const [highlightsByBlock, setHighlightsByBlock] = useState({}) // content_id -> array
   const [current, setCurrent] = useState(0)
@@ -59,7 +63,10 @@ export default function ModulePlayer() {
   const blockStartRef = useRef(Date.now())
   useEffect(() => {
     blockStartRef.current = Date.now()
-  }, [current, blocks])
+    // Depends on rawBlocks rather than the derived `blocks`, which is
+    // declared further down and would still be in the temporal dead zone
+    // when this dependency array is evaluated during render.
+  }, [current, rawBlocks])
 
   function elapsedSeconds() {
     return Math.max(1, Math.round((Date.now() - blockStartRef.current) / 1000))
@@ -81,7 +88,7 @@ export default function ModulePlayer() {
     setLoading(true)
     const { data: a } = await supabase
       .from('module_assignments')
-      .select('id, due_date, module_id, class_id, modules ( id, title, subject, description, teacher_id ), classes ( name )')
+      .select('id, due_date, module_id, class_id, modules ( id, title, subject, description, teacher_id, cover_image_url ), classes ( name )')
       .eq('id', assignmentId)
       .single()
     setAssignment(a)
@@ -110,7 +117,18 @@ export default function ModulePlayer() {
         .select('*')
         .eq('module_id', a.module_id)
         .order('order_index', { ascending: true })
-      setBlocks(b ?? [])
+      setRawBlocks(b ?? [])
+
+      // Sub-topics of this module. A module that has never been organised
+      // into sub-modules returns an empty list here, and groupBySubModule
+      // then yields one "Other content" group — so the player keeps working
+      // exactly as it did before this feature existed.
+      const { data: sm } = await supabase
+        .from('sub_modules')
+        .select('*')
+        .eq('module_id', a.module_id)
+        .order('order_index', { ascending: true })
+      setSubModules(sm ?? [])
 
       const { data: p } = await supabase
         .from('student_progress')
@@ -181,12 +199,52 @@ export default function ModulePlayer() {
     return () => { supabase.removeChannel(channel) }
   }, [user, assignmentId, assignment?.class_id])
 
+  // The sub-topic structure, and the flat walk-through order derived from
+  // it. `current` indexes `blocks` (the flattened list) so Previous/Next
+  // still move one block at a time and roll over sub-topic boundaries.
+  const groups = useMemo(() => groupBySubModule(rawBlocks, subModules), [rawBlocks, subModules])
+  const blocks = useMemo(() => flattenGroups(groups), [groups])
+
+  // Furthest sub-topic the student may open: everything up to and including
+  // the first one with required work left. Sub-topics beyond that are locked,
+  // which is what makes sub-modules a real progression rather than just
+  // visual grouping.
+  const openThrough = useMemo(() => unlockedThrough(groups, progressByBlock), [groups, progressByBlock])
+
   const totalBlocks = blocks.length
   const completedCount = useMemo(
     () => blocks.filter((b) => progressByBlock[b.id]?.completed).length,
     [blocks, progressByBlock]
   )
   const celebratedModuleRef = useRef(false)
+
+  // Keep the expanded sub-topic in sync with wherever the student actually is,
+  // so Next-ing off the end of a section opens the next one automatically.
+  const currentGroupIndex = blocks[current]?.groupIndex ?? 0
+  useEffect(() => {
+    setOpenGroup(currentGroupIndex)
+  }, [currentGroupIndex])
+
+  // Finishing a sub-topic is its own small milestone, so it gets its own
+  // (smaller) confetti burst — once per sub-topic, tracked by id so a
+  // reload or a revisit doesn't re-fire it.
+  const celebratedGroupsRef = useRef(new Set())
+  // First pass after load only records what's *already* finished, so
+  // re-opening a module the student finished last week doesn't replay a
+  // burst of confetti for every sub-topic.
+  const groupsPrimedRef = useRef(false)
+  useEffect(() => {
+    if (groups.length === 0) return
+    const priming = !groupsPrimedRef.current
+    for (const g of groups) {
+      if (!g.id || celebratedGroupsRef.current.has(g.id)) continue
+      if (groupProgress(g, progressByBlock).finished) {
+        celebratedGroupsRef.current.add(g.id)
+        if (!priming && completedCount < totalBlocks) celebrate({ big: false })
+      }
+    }
+    groupsPrimedRef.current = true
+  }, [groups, progressByBlock, completedCount, totalBlocks])
 
   useEffect(() => {
     if (totalBlocks > 0 && completedCount === totalBlocks && !celebratedModuleRef.current) {
@@ -291,10 +349,13 @@ export default function ModulePlayer() {
     saveProgress(block, { completed: true, completed_at: new Date().toISOString(), time_spent_seconds: elapsedSeconds() })
   }
 
-  async function handleActivitySubmit(block, response, score, maxScore) {
-    // Celebrate every graded submission — bigger burst for a perfect score.
-    const perfect = maxScore > 0 && score === maxScore
-    celebrate({ big: perfect })
+  async function handleActivitySubmit(block, response, score, maxScore, subjectiveMax = 0) {
+    // An activity with written, teacher-scored questions is saved "for
+    // review": no points, no badges, until a teacher reads it. Celebrating a
+    // perfect auto-score there would be premature, so hold the confetti.
+    const pendingReview = subjectiveMax > 0
+    const perfect = !pendingReview && maxScore > 0 && score === maxScore
+    if (!pendingReview) celebrate({ big: perfect })
 
     if (block.data?.mode === 'pair') {
       // Pair activities write both students' progress rows in one RPC call
@@ -306,6 +367,7 @@ export default function ModulePlayer() {
         p_score: score,
         p_max_score: maxScore,
         p_time_spent_seconds: elapsedSeconds(),
+        p_subjective_max: subjectiveMax,
       })
       if (!error) await loadAll()
       return
@@ -315,6 +377,14 @@ export default function ModulePlayer() {
       response,
       score,
       max_score: maxScore,
+      subjective_max: subjectiveMax,
+      pending_review: pendingReview,
+      // A resubmission starts the review over rather than keeping a score
+      // that was given for different words.
+      teacher_score: null,
+      teacher_feedback: null,
+      reviewed_at: null,
+      reviewed_by: null,
       completed: true,
       completed_at: new Date().toISOString(),
       time_spent_seconds: elapsedSeconds(),
@@ -380,38 +450,90 @@ export default function ModulePlayer() {
           </button>
         )}
 
+        {assignment.modules?.cover_image_url && (
+          <img className="module-cover-banner" src={assignment.modules.cover_image_url} alt="" />
+        )}
+
         <div className="progress-bar-track">
           <div className="progress-bar-fill" style={{ width: totalBlocks ? `${(completedCount / totalBlocks) * 100}%` : '0%' }} />
         </div>
-        <p className="muted small">{completedCount} / {totalBlocks} blocks complete</p>
+        <p className="muted small">
+          {completedCount} / {totalBlocks} blocks complete
+          {groups.length > 1 && ` · ${groups.filter((g) => groupProgress(g, progressByBlock).finished).length} / ${groups.length} sub-topics done`}
+        </p>
 
         {totalBlocks === 0 && <p className="muted">This module has no content yet.</p>}
 
         {totalBlocks > 0 && (
           <>
-            <div className="stepper">
-              {blocks.map((b, i) => {
-                // A student can always revisit a block they've already reached
-                // (backward, or one they finished). Moving to a block *ahead*
-                // of an unfinished, required block is what we block — that's
-                // the "skip the activity" case this whole feature exists for.
-                const isLocked = i > current && requiresCompletionGate(current)
+            {/* Sub-topic navigator. Each sub-module is a collapsible row with
+                its own progress ring; expanding it reveals the blocks inside.
+                A sub-topic past the first one with unfinished required work
+                is locked, so students work through the sub-topics in order
+                instead of jumping to the Self-Check. */}
+            <div className="submodule-nav">
+              {groups.map((g, gi) => {
+                const gp = groupProgress(g, progressByBlock)
+                const locked = gi > openThrough
+                const expanded = openGroup === gi && !locked
                 return (
-                  <button
-                    key={b.id}
-                    type="button"
-                    className={`stepper-btn${i === current ? ' stepper-btn-active' : ''}${progressByBlock[b.id]?.completed ? ' stepper-btn-done' : ''}${isLocked ? ' stepper-btn-locked' : ''}`}
-                    onClick={() => { if (!isLocked) { haptic('tap'); setCurrent(i) } }}
-                    disabled={isLocked}
-                    title={isLocked ? 'Finish the current activity first' : undefined}
+                  <div
+                    key={g.id ?? 'unsorted'}
+                    className={`submodule-item${expanded ? ' submodule-item-open' : ''}${locked ? ' submodule-item-locked' : ''}${gp.finished ? ' submodule-item-done' : ''}`}
                   >
-                    <BlockIcon type={b.type} size={13} /> {i + 1}
-                  </button>
+                    <button
+                      type="button"
+                      className="submodule-head"
+                      disabled={locked}
+                      onClick={() => { if (!locked) { haptic('tap'); setOpenGroup(expanded ? -1 : gi) } }}
+                      title={locked ? 'Finish the earlier sub-topics first' : undefined}
+                    >
+                      <span className="submodule-index">{gi + 1}</span>
+                      <span className="submodule-head-text">
+                        <span className="submodule-title">{g.title}</span>
+                        <span className="muted small">{gp.completed} / {gp.total} blocks</span>
+                      </span>
+                      {locked
+                        ? <Lock size={15} className="submodule-lock" />
+                        : gp.finished
+                          ? <CheckCircle2 size={18} className="submodule-check" />
+                          : <RingProgress percent={gp.percent} size={34} stroke={4} />}
+                      {!locked && <ChevronDown size={15} className="submodule-chevron" />}
+                    </button>
+
+                    {expanded && (
+                      <div className="stepper submodule-stepper">
+                        {g.blocks.map((b) => {
+                          const i = blocks.findIndex((x) => x.id === b.id)
+                          // Inside an unlocked sub-topic a student can still
+                          // revisit anything they've reached, but can't skip
+                          // forward past an unfinished required block.
+                          const isLocked = i > current && requiresCompletionGate(current)
+                          return (
+                            <button
+                              key={b.id}
+                              type="button"
+                              className={`stepper-btn${i === current ? ' stepper-btn-active' : ''}${progressByBlock[b.id]?.completed ? ' stepper-btn-done' : ''}${isLocked ? ' stepper-btn-locked' : ''}`}
+                              onClick={() => { if (!isLocked) { haptic('tap'); setCurrent(i) } }}
+                              disabled={isLocked}
+                              title={isLocked ? 'Finish the current activity first' : b.title}
+                            >
+                              <BlockIcon type={b.type} size={13} /> {i + 1}
+                            </button>
+                          )
+                        })}
+                        {g.blocks.length === 0 && <p className="muted small">Nothing in this sub-topic yet.</p>}
+                      </div>
+                    )}
+                  </div>
                 )
               })}
             </div>
 
             <div className="module-card" style={{ marginTop: '1rem' }}>
+              <p className="submodule-breadcrumb">
+                {groups[block.groupIndex]?.title} · block {block.indexInGroup + 1} of {groups[block.groupIndex]?.blocks.length}
+              </p>
               <h3><BlockIcon type={block.type} size={18} /> {block.title}</h3>
               {View && (
                 <View
@@ -425,7 +547,7 @@ export default function ModulePlayer() {
                   data={block.data}
                   progress={progress}
                   onComplete={() => (block.type === 'lecture' ? handleLectureComplete(block) : handleInteractiveComplete(block))}
-                  onSubmit={(response, score, maxScore) => handleActivitySubmit(block, response, score, maxScore)}
+                  onSubmit={(response, score, maxScore, subjectiveMax) => handleActivitySubmit(block, response, score, maxScore, subjectiveMax)}
                   highlights={block.type === 'lecture' ? (highlightsByBlock[block.id] ?? []) : []}
                   onAddHighlight={block.type === 'lecture' ? (h) => addHighlight(block, h) : undefined}
                   onDeleteHighlight={block.type === 'lecture' ? (id) => deleteHighlight(block, id) : undefined}
@@ -441,7 +563,7 @@ export default function ModulePlayer() {
                 disabled={current === blocks.length - 1 || requiresCompletionGate(current)}
                 onClick={() => { haptic('tap'); setCurrent((c) => c + 1) }}
               >
-                Next <ArrowRight size={15} />
+                {blocks[current + 1] && blocks[current + 1].groupIndex !== block.groupIndex ? 'Next sub-topic' : 'Next'} <ArrowRight size={15} />
               </button>
             </div>
             {requiresCompletionGate(current) && current < blocks.length - 1 && (

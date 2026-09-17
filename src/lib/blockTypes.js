@@ -23,6 +23,13 @@ export const ACTIVITY_MODES = [
   { mode: 'pair', label: 'Pair Activity' },
 ]
 
+// A question with `subjective: true` has no single correct string — a
+// written sentence, a rewritten message, a dialogue. The auto-grader skips
+// it entirely: it contributes nothing to `score`/`maxScore`, and its points
+// are reported separately as `subjectiveMax` so the activity can be held
+// "for review" until a teacher scores it by hand. `sampleAnswer` is the
+// key's model answer, shown to the teacher while reviewing (never to the
+// student before submission).
 export const QUESTION_TYPES = [
   { type: 'multiple_choice', label: 'Multiple Choice' },
   { type: 'true_false', label: 'True / False' },
@@ -65,7 +72,7 @@ export function defaultQuestion(type) {
   const base = { id: makeId('q'), type, prompt: '', points: 1 }
   if (type === 'multiple_choice') return { ...base, options: ['', ''], correctIndex: 0 }
   if (type === 'true_false') return { ...base, correctAnswer: true }
-  if (type === 'short_answer') return { ...base, acceptedAnswers: [''] }
+  if (type === 'short_answer') return { ...base, acceptedAnswers: [''], subjective: false, sampleAnswer: '' }
   if (type === 'matching') return { ...base, pairs: [{ left: '', right: '' }, { left: '', right: '' }] }
   return base
 }
@@ -89,13 +96,26 @@ function normalize(s) {
 //   true_false       -> boolean
 //   short_answer     -> string
 //   matching         -> { [leftIndex]: chosenOriginalRightIndex }
+export function isSubjective(q) {
+  return q?.subjective === true
+}
+
 export function gradeActivity(questions, responses) {
   let score = 0
   let maxScore = 0
+  let subjectiveMax = 0
   const correctByQuestion = {}
 
   for (const q of questions) {
     const pts = Number(q.points) || 1
+    if (isSubjective(q)) {
+      // Not auto-graded and not counted against the student — a teacher
+      // scores it later. correctByQuestion records null, which the view
+      // renders as "For review" rather than a tick or a cross.
+      subjectiveMax += pts
+      correctByQuestion[q.id] = null
+      continue
+    }
     maxScore += pts
     const r = responses?.[q.id]
     let correct = false
@@ -116,7 +136,7 @@ export function gradeActivity(questions, responses) {
     correctByQuestion[q.id] = correct
   }
 
-  return { score, maxScore, correctByQuestion }
+  return { score, maxScore, subjectiveMax, correctByQuestion, hasSubjective: subjectiveMax > 0 }
 }
 
 // Deterministic-ish shuffle for matching-question right-hand options —

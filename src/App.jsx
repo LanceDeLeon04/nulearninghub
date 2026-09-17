@@ -17,6 +17,7 @@ import AssignmentNotes from './pages/teacher/AssignmentNotes'
 import TeacherClassManagement from './pages/teacher/ClassManagement'
 import ModulePreview from './pages/teacher/ModulePreview'
 import TeachersGuide from './pages/teacher/TeachersGuide'
+import ReviewSubmissions from './pages/teacher/ReviewSubmissions'
 // ModulePreview is shared: it's role-aware (see BACK_LINK inside the
 // component) and is also mounted below under an /admin route.
 
@@ -74,6 +75,9 @@ export default function App() {
           } />
           <Route path="/teacher/module-preview/:moduleId" element={
             <PrivateRoute allowedRoles={['teacher']}><ModulePreview /></PrivateRoute>
+          } />
+          <Route path="/teacher/review-submissions" element={
+            <PrivateRoute allowedRoles={['teacher']}><ReviewSubmissions /></PrivateRoute>
           } />
           <Route path="/teacher/teachers-guide" element={
             <PrivateRoute allowedRoles={['teacher']}><TeachersGuide /></PrivateRoute>

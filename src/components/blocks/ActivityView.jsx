@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react'
-import { gradeActivity, shuffle } from '../../lib/blockTypes'
-import { ArrowLeftRight, Send, Award, CheckCircle2, XCircle } from 'lucide-react'
+import { gradeActivity, shuffle, isSubjective } from '../../lib/blockTypes'
+import { ArrowLeftRight, Send, Award, CheckCircle2, XCircle, Hourglass } from 'lucide-react'
 import { haptic } from '../../lib/haptics'
 import PairRequestPanel, { PairedBanner } from '../PairRequestPanel'
 import ReadAloud from '../ReadAloud'
+import RichText, { plainText } from '../RichText'
 
 function MatchingQuestion({ question, value, onAnswer, locked }) {
   const shuffledRights = useMemo(
@@ -49,6 +50,8 @@ function isAnswered(question, value) {
       return value === true || value === false
     case 'short_answer':
       return typeof value === 'string' && value.trim().length > 0
+    case 'essay':
+      return typeof value === 'string' && value.trim().length > 0
     case 'matching':
       return !!value && question.pairs.every((_, i) => value[i] !== undefined)
     default:
@@ -62,8 +65,19 @@ export default function ActivityView({ data, progress, onSubmit, readOnly = fals
   const alreadySubmitted = progress?.completed ?? false
   const [responses, setResponses] = useState(progress?.response ?? {})
   const [result, setResult] = useState(
-    alreadySubmitted ? { score: progress.score, maxScore: progress.max_score, correctByQuestion: null } : null
+    alreadySubmitted
+      ? {
+          score: progress.score,
+          maxScore: progress.max_score,
+          subjectiveMax: progress.subjective_max ?? 0,
+          correctByQuestion: null,
+        }
+      : null
   )
+  // True once submitted while a teacher still owes this student a score for
+  // the written parts. Read from the saved row so it survives a reload.
+  const pendingReview = alreadySubmitted ? (progress?.pending_review ?? false) : false
+  const teacherScore = progress?.teacher_score ?? null
   const [justSubmitted, setJustSubmitted] = useState(false)
   const [showMissingWarning, setShowMissingWarning] = useState(false)
 
@@ -96,9 +110,14 @@ export default function ActivityView({ data, progress, onSubmit, readOnly = fals
     }
     haptic('tap')
     const graded = gradeActivity(questions, responses)
-    setResult({ score: graded.score, maxScore: graded.maxScore, correctByQuestion: graded.correctByQuestion })
+    setResult({
+      score: graded.score,
+      maxScore: graded.maxScore,
+      subjectiveMax: graded.subjectiveMax,
+      correctByQuestion: graded.correctByQuestion,
+    })
     setJustSubmitted(true)
-    onSubmit(responses, graded.score, graded.maxScore)
+    onSubmit(responses, graded.score, graded.maxScore, graded.subjectiveMax)
   }
 
   const locked = !!result || readOnly
@@ -107,19 +126,28 @@ export default function ActivityView({ data, progress, onSubmit, readOnly = fals
     <div className="block-view">
       {isPairMode && pairing?.partner && <PairedBanner partnerName={pairing.partner.full_name} />}
       {isPairMode && !pairing && alreadySubmitted && <PairedBanner partnerName="your partner" />}
-      {data.instructions && <p className="muted activity-instructions">{data.instructions}</p>}
-      {data.instructions && <ReadAloud text={data.instructions} />}
+      {data.instructions && <RichText as="p" className="muted activity-instructions" text={data.instructions} />}
+      {data.instructions && <ReadAloud text={plainText(data.instructions)} />}
 
       {questions.map((q, qi) => {
-        const isCorrect = result?.correctByQuestion ? result.correctByQuestion[q.id] : null
+        const subjective = isSubjective(q)
+        // A subjective question is never marked right or wrong by the app —
+        // correctByQuestion holds null for it, and the card stays neutral.
+        const isCorrect = subjective ? null : (result?.correctByQuestion ? result.correctByQuestion[q.id] : null)
         return (
         <div
           key={q.id}
-          className={`activity-question${locked ? (isCorrect ? ' activity-question-correct' : ' activity-question-incorrect') : ''}${justSubmitted ? ' reveal-pop' : ''}${!locked && showMissingWarning && unansweredIds.has(q.id) ? ' activity-question-missing' : ''}`}
+          className={`activity-question${locked && !subjective ? (isCorrect ? ' activity-question-correct' : ' activity-question-incorrect') : ''}${locked && subjective ? ' activity-question-review' : ''}${justSubmitted ? ' reveal-pop' : ''}${!locked && showMissingWarning && unansweredIds.has(q.id) ? ' activity-question-missing' : ''}`}
           style={justSubmitted ? { animationDelay: `${qi * 60}ms` } : undefined}
         >
           <p className="question-prompt">
-            {q.prompt} <span className="muted small">({q.points} pt{q.points === 1 ? '' : 's'})</span>
+            <RichText text={q.prompt} />{' '}
+            <span className="muted small">({q.points} pt{q.points === 1 ? '' : 's'})</span>
+            {subjective && (
+              <span className="badge status-pending" style={{ marginLeft: '0.5rem' }}>
+                <Hourglass size={12} /> Teacher-scored
+              </span>
+            )}
             {locked && isCorrect !== null && (
               isCorrect
                 ? <CheckCircle2 size={16} className="answer-correct-icon" style={{ marginLeft: '0.4rem', verticalAlign: '-3px' }} />
@@ -160,13 +188,29 @@ export default function ActivityView({ data, progress, onSubmit, readOnly = fals
             </div>
           )}
 
-          {q.type === 'short_answer' && (
-            <input
-              disabled={locked}
-              value={responses[q.id] ?? ''}
-              onChange={(e) => setAnswer(q.id, e.target.value)}
-              placeholder="Your answer"
-            />
+          {(q.type === 'short_answer' || q.type === 'essay') && (
+            subjective || q.type === 'essay' ? (
+              <textarea
+                rows={q.points > 2 ? 6 : 3}
+                disabled={locked}
+                value={responses[q.id] ?? ''}
+                onChange={(e) => setAnswer(q.id, e.target.value)}
+                placeholder="Write your answer — your teacher will read and score this."
+              />
+            ) : (
+              <input
+                disabled={locked}
+                value={responses[q.id] ?? ''}
+                onChange={(e) => setAnswer(q.id, e.target.value)}
+                placeholder="Your answer"
+              />
+            )
+          )}
+
+          {locked && subjective && (
+            <p className="muted small activity-review-note">
+              <Hourglass size={12} /> For review — no score yet. Your teacher will read this answer and score it.
+            </p>
           )}
 
           {q.type === 'matching' && (
@@ -185,9 +229,27 @@ export default function ActivityView({ data, progress, onSubmit, readOnly = fals
           <button onClick={handleSubmit}><Send size={15} /> Submit Activity</button>
         )}
         {locked && result && (
-          <span className={`badge status-approved${justSubmitted ? ' score-badge-pop' : ''}`}>
-            <Award size={13} /> Score: {result.score} / {result.maxScore}
-          </span>
+          <>
+            {result.maxScore > 0 && (
+              <span className={`badge status-approved${justSubmitted ? ' score-badge-pop' : ''}`}>
+                <Award size={13} /> Auto-scored: {result.score} / {result.maxScore}
+              </span>
+            )}
+            {(result.subjectiveMax > 0 || pendingReview) && (
+              pendingReview || teacherScore === null ? (
+                <span className="badge status-pending">
+                  <Hourglass size={13} /> For review — no score yet ({result.subjectiveMax} pt{result.subjectiveMax === 1 ? '' : 's'} pending)
+                </span>
+              ) : (
+                <span className="badge status-approved">
+                  <Award size={13} /> Teacher-scored: {teacherScore} / {result.subjectiveMax}
+                </span>
+              )
+            )}
+          </>
+        )}
+        {locked && progress?.teacher_feedback && (
+          <p className="teacher-feedback"><strong>Teacher's feedback:</strong> {progress.teacher_feedback}</p>
         )}
         {readOnly && !result && (
           <span className="muted small">Preview only — answering is disabled for teachers.</span>

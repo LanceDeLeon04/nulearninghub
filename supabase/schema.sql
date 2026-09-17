@@ -729,3 +729,10 @@ end;
 $$;
 
 grant execute on function get_class_leaderboard(uuid) to authenticated;
+
+-- ==========================================================
+-- SUB-MODULES (sub-topics inside a module)
+-- ==========================================================
+-- Lives in its own file, add_sub_modules.sql, because it also backfills
+-- sub-topics for content that already exists. Run that file after this
+-- one and after the seed_content_*.sql files. It is idempotent.

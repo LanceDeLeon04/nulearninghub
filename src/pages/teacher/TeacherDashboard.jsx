@@ -11,12 +11,14 @@ import {
   ClipboardList,
   FilePlus2,
   Users,
+  ClipboardCheck,
 } from 'lucide-react'
 
 export default function TeacherDashboard() {
   const { user } = useAuth()
   const [classCount, setClassCount] = useState(0)
   const [moduleCount, setModuleCount] = useState(0)
+  const [pendingReviews, setPendingReviews] = useState(0)
 
   useEffect(() => {
     async function load() {
@@ -32,6 +34,10 @@ export default function TeacherDashboard() {
 
       setClassCount(classes ?? 0)
       setModuleCount(modules ?? 0)
+
+      // Written answers from this teacher's classes still waiting on a score.
+      const { data: pending } = await supabase.rpc('get_pending_reviews')
+      setPendingReviews((pending ?? []).length)
     }
     if (user) load()
   }, [user])
@@ -49,6 +55,13 @@ export default function TeacherDashboard() {
             <div className="stat-body">
               <div className="stat-number">{classCount}</div>
               <div className="stat-label">My Classes</div>
+            </div>
+          </div>
+          <div className="stat-card">
+            <span className="stat-icon"><ClipboardCheck size={20} /></span>
+            <div className="stat-body">
+              <div className="stat-number">{pendingReviews}</div>
+              <div className="stat-label">To Review</div>
             </div>
           </div>
           <div className="stat-card">
@@ -75,6 +88,11 @@ export default function TeacherDashboard() {
             <span className="action-card-icon"><ClipboardList size={20} /></span>
             <h3>Assign Module</h3>
             <p>Assign an approved module to one of your classes with a deadline.</p>
+          </Link>
+          <Link className="action-card" to="/teacher/review-submissions" onClick={() => haptic('tap')}>
+            <span className="action-card-icon"><ClipboardCheck size={20} /></span>
+            <h3>Review Submissions{pendingReviews > 0 ? ` (${pendingReviews})` : ''}</h3>
+            <p>Score the written answers the app deliberately leaves ungraded.</p>
           </Link>
           <Link className="action-card" to="/teacher/add-module" onClick={() => haptic('tap')}>
             <span className="action-card-icon"><FilePlus2 size={20} /></span>

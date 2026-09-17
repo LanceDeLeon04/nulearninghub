@@ -16,6 +16,7 @@ import {
   UserPlus,
   MessageSquare,
   LogOut,
+  ClipboardCheck,
 } from 'lucide-react'
 
 const NAV_LINKS = {
@@ -25,6 +26,7 @@ const NAV_LINKS = {
     { to: '/teacher/modules', label: 'Modules', icon: BookOpen },
     { to: '/teacher/assign-module', label: 'Assign Module', icon: ClipboardList },
     { to: '/teacher/add-module', label: 'Add Module', icon: FilePlus2 },
+    { to: '/teacher/review-submissions', label: 'Review', icon: ClipboardCheck },
   ],
   student: [
     { to: '/student', label: 'Dashboard', icon: LayoutDashboard },

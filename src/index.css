@@ -1297,3 +1297,163 @@ input:focus, select:focus, textarea:focus {
   .floating-msg-modal-body .chat-shell { grid-template-columns: 1fr; }
   .floating-msg-btn { right: 1rem; bottom: 1rem; }
 }
+
+/* ===== Sub-modules (sub-topics inside a module) ===== */
+/* Student player: collapsible sub-topic navigator above the block. */
+.submodule-nav { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 1rem; }
+.submodule-item {
+  border: 1px solid var(--glass-border-card);
+  border-radius: var(--radius-sm);
+  background: var(--glass-bg);
+  overflow: hidden;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.submodule-item-open { border-color: var(--primary); background: var(--glass-bg-strong); }
+.submodule-item-done { border-color: #bbf7d0; }
+.submodule-item-locked { opacity: 0.55; }
+.submodule-head {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.6rem 0.8rem;
+  background: none;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+}
+.submodule-head:hover { transform: none; box-shadow: none; }
+.submodule-head:disabled { cursor: not-allowed; }
+.submodule-head-text { flex: 1; display: flex; flex-direction: column; gap: 0.1rem; min-width: 0; }
+.submodule-title { font-weight: 700; font-size: 0.92rem; }
+.submodule-index {
+  flex: none;
+  width: 22px; height: 22px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 999px;
+  background: var(--bg-alt);
+  color: var(--primary);
+  font-size: 0.72rem; font-weight: 800;
+}
+.submodule-item-done .submodule-index { background: rgba(220,252,231,0.85); color: var(--success); }
+.submodule-check { color: var(--success); flex: none; }
+.submodule-lock { color: var(--muted); flex: none; }
+.submodule-chevron { color: var(--muted); flex: none; transition: transform 0.18s ease; }
+.submodule-item-open .submodule-chevron { transform: rotate(180deg); }
+.submodule-stepper { margin: 0; padding: 0 0.8rem 0.75rem; }
+.submodule-breadcrumb {
+  margin: 0 0 0.25rem;
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* Teacher builder + preview: sub-topic headings over grouped block lists. */
+.block-group { margin-bottom: 0.9rem; }
+.block-group-label {
+  margin: 0 0 0.35rem;
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--primary);
+}
+.preview-group { margin-top: 0.9rem; }
+.preview-group .stepper { margin-top: 0.3rem; }
+.submodule-admin-list { list-style: none; margin: 0 0 0.6rem; padding: 0; display: flex; flex-direction: column; gap: 0.35rem; }
+.submodule-admin-list li { display: flex; align-items: center; justify-content: space-between; gap: 0.4rem; }
+.submodule-admin-title { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; font-weight: 600; min-width: 0; }
+.submodule-admin-rename { display: flex; gap: 0.3rem; width: 100%; }
+.submodule-admin-rename input { flex: 1; margin: 0; }
+.submodule-admin-add { display: flex; gap: 0.4rem; align-items: center; }
+.submodule-admin-add input { flex: 1; margin: 0; }
+
+/* ===== Typeset lecture body ===== */
+/* The body is now a document, not a <pre>: parseLectureBody emits one block
+   element per line, so white-space: pre-wrap would double every gap. The
+   raw newline characters are still in the DOM (hidden below) because
+   highlight offsets are counted against them. */
+.lecture-body { white-space: normal; line-height: 1.7; }
+.lecture-syntax { font-size: 0; line-height: 0; }
+.lecture-heading {
+  margin: 1.4rem 0 0.5rem;
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--primary);
+  letter-spacing: 0.01em;
+}
+.lecture-subheading {
+  margin: 1.1rem 0 0.35rem;
+  font-size: 0.97rem;
+  font-weight: 800;
+  color: var(--text);
+}
+.lecture-body > *:first-child { margin-top: 0; }
+/* Indented paragraphs, as in the printed module. */
+.lecture-para { margin: 0 0 0.55rem; text-indent: 2em; text-align: justify; }
+.lecture-list-item { margin: 0 0 0.3rem; padding-left: 1.2rem; text-indent: 0; }
+.lecture-blank { height: 0.5rem; }
+.lecture-para strong, .lecture-list-item strong { font-weight: 800; }
+
+/* Photos inside a lecture block. */
+.lecture-figure { margin: 0 auto 0.6rem; text-align: center; }
+.lecture-figure img { width: 100%; border-radius: var(--radius-sm); box-shadow: var(--shadow-glass); display: block; }
+.lecture-figure-small { max-width: 220px; }
+.lecture-figure-medium { max-width: 360px; }
+.lecture-figure-full { max-width: 100%; }
+.lecture-figure figcaption { margin-top: 0.4rem; font-size: 0.78rem; color: var(--muted); font-style: italic; }
+.lecture-image-preview { display: flex; align-items: center; gap: 0.6rem; margin: 0.4rem 0; }
+.lecture-image-preview img { width: 90px; border-radius: var(--radius-sm); }
+.block-editor-heading { margin: 1rem 0 0.2rem; font-size: 0.9rem; display: flex; align-items: center; gap: 0.4rem; color: var(--primary); }
+
+/* Module cover photos. */
+.module-cover-banner {
+  width: 100%; max-height: 220px; object-fit: cover;
+  border-radius: var(--radius-sm); margin-bottom: 0.9rem; display: block;
+}
+.module-card-cover {
+  width: 100%; height: 130px; object-fit: cover;
+  border-radius: var(--radius-sm); margin-bottom: 0.7rem; display: block;
+}
+.module-cover-editor {
+  display: flex; gap: 1rem; align-items: flex-start; flex-wrap: wrap;
+  border: 1px solid var(--glass-border-card); border-radius: var(--radius-sm);
+  background: var(--glass-bg); padding: 0.8rem; margin-bottom: 1rem;
+}
+.module-cover-preview {
+  width: 160px; height: 100px; flex: none;
+  display: flex; align-items: center; justify-content: center; text-align: center;
+  border-radius: var(--radius-sm); background: var(--bg-alt); overflow: hidden;
+}
+.module-cover-preview img { width: 100%; height: 100%; object-fit: cover; }
+.module-cover-controls { flex: 1; min-width: 220px; display: flex; flex-direction: column; gap: 0.4rem; }
+.module-cover-controls h4 { margin: 0; font-size: 0.92rem; display: flex; align-items: center; gap: 0.4rem; color: var(--primary); }
+.module-cover-controls input { margin: 0; }
+
+/* ===== Subjective (teacher-scored) answers ===== */
+.prompt-underline { text-decoration: underline; text-underline-offset: 2px; text-decoration-thickness: 2px; }
+.activity-question-review { border-color: var(--gold-dark, #d4a017); background: rgba(255, 199, 44, 0.08); }
+.activity-review-note { display: flex; align-items: center; gap: 0.35rem; margin: 0.4rem 0 0; }
+.teacher-feedback {
+  width: 100%; margin: 0.5rem 0 0; padding: 0.6rem 0.75rem;
+  border-radius: var(--radius-sm); background: var(--bg-alt); font-size: 0.86rem;
+}
+
+/* Teacher's review queue */
+.review-card { margin-top: 1rem; }
+.review-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.8rem; flex-wrap: wrap; }
+.review-card-head h3 { margin: 0; }
+.review-answer { margin-top: 0.8rem; padding-top: 0.8rem; border-top: 1px solid var(--glass-border-card); }
+.review-student-answer {
+  margin: 0.35rem 0 0; padding: 0.6rem 0.75rem; white-space: pre-wrap;
+  border-radius: var(--radius-sm); background: var(--bg-alt); line-height: 1.55;
+}
+.review-key { margin-top: 0.45rem; font-size: 0.84rem; }
+.review-key summary { cursor: pointer; color: var(--primary); font-weight: 700; }
+.review-key p { margin: 0.35rem 0 0; color: var(--muted); font-style: italic; }
+.review-score-row { display: flex; gap: 0.7rem; align-items: flex-end; flex-wrap: wrap; margin-top: 0.9rem; }
+.review-score-row label { margin: 0; }
+.review-score-row input[type="number"] { width: 110px; }

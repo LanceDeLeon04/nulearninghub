@@ -2,36 +2,60 @@ import { useEffect, useRef, useState } from 'react'
 import ReadAloud from '../ReadAloud'
 import { CheckCircle2, BookCheck, Highlighter, MessageSquarePlus, Trash2 } from 'lucide-react'
 import { haptic } from '../../lib/haptics'
+import { parseLectureBody, applyHighlights } from '../../lib/lectureFormat'
 
-// Renders data.body with any saved highlights as <mark> spans, computed
-// from plain character offsets into the raw body string.
-function HighlightedBody({ text, highlights, activeId, onMarkClick }) {
-  const sorted = [...highlights].sort((a, b) => a.start_offset - b.start_offset)
-  const pieces = []
-  let cursor = 0
-  for (const h of sorted) {
-    if (h.start_offset < cursor) continue // skip overlaps, keep it simple
-    if (h.start_offset > cursor) pieces.push({ text: text.slice(cursor, h.start_offset) })
-    pieces.push({ text: text.slice(h.start_offset, h.end_offset), h })
-    cursor = h.end_offset
+// Renders data.body as a typeset document — bold headings, indented
+// paragraphs, list items, inline bold — with any saved highlights drawn as
+// <mark> spans on top. See src/lib/lectureFormat.js: the parser guarantees
+// every character of the raw body is still in the DOM, in order, so the
+// plain character offsets highlights are stored as stay valid.
+const LINE_TAG = { heading: 'h3', subheading: 'h4', list: 'p', para: 'p', blank: 'div' }
+const LINE_CLASS = {
+  heading: 'lecture-heading',
+  subheading: 'lecture-subheading',
+  list: 'lecture-list-item',
+  para: 'lecture-para',
+  blank: 'lecture-blank',
+}
+
+function Piece({ piece, activeId, onMarkClick }) {
+  const className = piece.style === 'syntax' ? 'lecture-syntax' : undefined
+  const inner = piece.style === 'bold' ? <strong>{piece.text}</strong> : piece.text
+  if (piece.h) {
+    return (
+      <mark
+        className={`lecture-mark${piece.h.note ? ' lecture-mark-noted' : ''}${activeId === piece.h.id ? ' lecture-mark-active' : ''}`}
+        onClick={() => onMarkClick(piece.h.id)}
+      >
+        {inner}
+      </mark>
+    )
   }
-  if (cursor < text.length) pieces.push({ text: text.slice(cursor) })
+  return <span className={className}>{inner}</span>
+}
 
+function FormattedBody({ text, highlights, activeId, onMarkClick }) {
+  const lines = parseLectureBody(text)
   return (
     <div className="lecture-body lecture-body-selectable">
-      {pieces.map((p, i) =>
-        p.h ? (
-          <mark
-            key={p.h.id}
-            className={`lecture-mark${p.h.note ? ' lecture-mark-noted' : ''}${activeId === p.h.id ? ' lecture-mark-active' : ''}`}
-            onClick={() => onMarkClick(p.h.id)}
+      {lines.map((line, i) => {
+        const Tag = LINE_TAG[line.kind] ?? 'p'
+        const pieces = applyHighlights(line.segments, highlights)
+        return (
+          <Tag
+            key={i}
+            className={LINE_CLASS[line.kind]}
+            // The Table of Contents leans on leading spaces for depth;
+            // padding keeps that nesting readable once the raw spaces are
+            // no longer doing the work visually.
+            style={line.indent ? { paddingLeft: `${line.indent * 0.6}rem` } : undefined}
           >
-            {p.text}
-          </mark>
-        ) : (
-          <span key={i}>{p.text}</span>
+            {pieces.map((p, j) => (
+              <Piece key={j} piece={p} activeId={activeId} onMarkClick={onMarkClick} />
+            ))}
+          </Tag>
         )
-      )}
+      })}
     </div>
   )
 }
@@ -112,10 +136,19 @@ export default function LectureView({ data, progress, onComplete, highlights = [
 
   return (
     <div className="block-view" style={{ position: 'relative' }}>
-      {data.readAloudEnabled !== false && <ReadAloud text={bodyText} />}
+      {/* Read-aloud gets the prose without the ** bold markers, which would
+          otherwise be spoken as "star star". */}
+      {data.readAloudEnabled !== false && <ReadAloud text={bodyText.replace(/\*\*/g, '')} />}
+
+      {data.imageUrl && (
+        <figure className={`lecture-figure lecture-figure-${data.imageSize ?? 'medium'}`}>
+          <img src={data.imageUrl} alt={data.imageCaption || 'Lecture image'} />
+          {data.imageCaption && <figcaption>{data.imageCaption}</figcaption>}
+        </figure>
+      )}
 
       <div ref={bodyRef} onMouseUp={handleMouseUp}>
-        <HighlightedBody
+        <FormattedBody
           text={bodyText}
           highlights={highlights}
           activeId={activeId}

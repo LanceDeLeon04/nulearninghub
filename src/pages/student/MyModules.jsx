@@ -50,7 +50,7 @@ export default function MyModules() {
 
       const { data, error } = await supabase
         .from('module_assignments')
-        .select('id, due_date, module_id, modules ( title, subject, description, sequence_order ), classes ( name )')
+        .select('id, due_date, module_id, modules ( title, subject, description, sequence_order, cover_image_url ), classes ( name )')
         .in('class_id', classIds)
 
       if (error || !data) {
@@ -77,6 +77,14 @@ export default function MyModules() {
 
       const { data: contentRows } = await supabase
         .from('module_content')
+        .select('id, module_id, sub_module_id')
+        .in('module_id', moduleIds)
+
+      // Sub-topics per module, so each card can say how far through the
+      // module's sub-topics the student is — a more meaningful unit of
+      // progress than raw block counts once modules get long.
+      const { data: subModuleRows } = await supabase
+        .from('sub_modules')
         .select('id, module_id')
         .in('module_id', moduleIds)
 
@@ -96,11 +104,42 @@ export default function MyModules() {
         doneByAssignment[p.assignment_id] = (doneByAssignment[p.assignment_id] ?? 0) + 1
       }
 
-      const withProgress = data.map((a) => ({
-        ...a,
-        totalBlocks: totalByModule[a.module_id] ?? 0,
-        completedBlocks: doneByAssignment[a.id] ?? 0,
-      }))
+      // sub_module_id -> total blocks, and which sub-module each block is in,
+      // so a sub-topic counts as finished only when every block inside it is.
+      const subModuleOfBlock = {}
+      const blocksPerSubModule = {}
+      for (const c of contentRows ?? []) {
+        if (!c.sub_module_id) continue
+        subModuleOfBlock[c.id] = c.sub_module_id
+        blocksPerSubModule[c.sub_module_id] = (blocksPerSubModule[c.sub_module_id] ?? 0) + 1
+      }
+      const subModulesByModule = {}
+      for (const sm of subModuleRows ?? []) {
+        if (!subModulesByModule[sm.module_id]) subModulesByModule[sm.module_id] = []
+        subModulesByModule[sm.module_id].push(sm.id)
+      }
+      const doneInSubByAssignment = {}
+      for (const p of progressRows ?? []) {
+        const smId = subModuleOfBlock[p.content_id]
+        if (!smId) continue
+        const key = `${p.assignment_id}:${smId}`
+        doneInSubByAssignment[key] = (doneInSubByAssignment[key] ?? 0) + 1
+      }
+
+      const withProgress = data.map((a) => {
+        const ownSubModules = subModulesByModule[a.module_id] ?? []
+        const completedSubModules = ownSubModules.filter((smId) => {
+          const total = blocksPerSubModule[smId] ?? 0
+          return total > 0 && (doneInSubByAssignment[`${a.id}:${smId}`] ?? 0) >= total
+        }).length
+        return {
+          ...a,
+          totalBlocks: totalByModule[a.module_id] ?? 0,
+          completedBlocks: doneByAssignment[a.id] ?? 0,
+          totalSubModules: ownSubModules.length,
+          completedSubModules,
+        }
+      })
 
       setAssignments(withProgress)
     }
@@ -134,6 +173,9 @@ export default function MyModules() {
             const finished = a.totalBlocks > 0 && a.completedBlocks === a.totalBlocks
             return (
               <div key={a.id} className={`module-card${finished ? ' finished' : ''}`}>
+                {a.modules?.cover_image_url && (
+                  <img className="module-card-cover" src={a.modules.cover_image_url} alt="" />
+                )}
                 <div className="module-card-top">
                   <span className="subject-chip">{subjectEmoji(a.modules?.subject)} {a.modules?.subject}</span>
                   {finished && <Crown className="module-card-crown" size={18} />}
@@ -156,7 +198,10 @@ export default function MyModules() {
                       <div className="progress-bar-track">
                         <div className="progress-bar-fill" style={{ width: `${pct}%` }} />
                       </div>
-                      <p className="muted small" style={{ margin: '0.3rem 0 0' }}>{a.completedBlocks} / {a.totalBlocks} complete</p>
+                      <p className="muted small" style={{ margin: '0.3rem 0 0' }}>
+                        {a.completedBlocks} / {a.totalBlocks} blocks complete
+                        {a.totalSubModules > 0 && ` · ${a.completedSubModules} / ${a.totalSubModules} sub-topics`}
+                      </p>
                     </div>
                   </div>
                 )}

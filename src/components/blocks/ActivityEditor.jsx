@@ -80,6 +80,10 @@ function QuestionEditor({ question, onChange, onRemove }) {
       <label>
         Question Prompt
         <input value={question.prompt} onChange={(e) => update({ prompt: e.target.value })} />
+        <span className="muted small">
+          Wrap a word in __double underscores__ to underline it, or **double asterisks** to bold it —
+          use this for prompts that refer to “the underlined word”.
+        </span>
       </label>
 
       {question.type === 'multiple_choice' && (
@@ -125,12 +129,35 @@ function QuestionEditor({ question, onChange, onRemove }) {
       )}
 
       {question.type === 'short_answer' && (
+        <label className="checkbox-label" style={{ marginTop: '0.4rem' }}>
+          <input
+            type="checkbox"
+            checked={question.subjective === true}
+            onChange={(e) => onChange({ ...question, subjective: e.target.checked })}
+          />
+          Answers may vary — don't auto-score this; hold it for teacher review
+        </label>
+      )}
+
+      {question.type === 'short_answer' && question.subjective && (
+        <label>
+          Model answer (from the key — shown to you while reviewing, never to the student)
+          <textarea
+            rows={3}
+            value={question.sampleAnswer ?? ''}
+            onChange={(e) => onChange({ ...question, sampleAnswer: e.target.value })}
+            placeholder="What a full-credit answer looks like"
+          />
+        </label>
+      )}
+
+      {question.type === 'short_answer' && !question.subjective && (
         <div className="option-list">
           <p className="muted small">Accepted answers (any match counts as correct)</p>
-          {question.acceptedAnswers.map((a, i) => (
+          {(question.acceptedAnswers ?? []).map((a, i) => (
             <div key={i} className="option-row">
               <input value={a} onChange={(e) => updateAcceptedAnswer(i, e.target.value)} placeholder="Accepted answer" />
-              {question.acceptedAnswers.length > 1 && (
+              {(question.acceptedAnswers ?? []).length > 1 && (
                 <button type="button" className="btn btn-reject btn-sm" onClick={() => removeAcceptedAnswer(i)}><X size={13} /></button>
               )}
             </div>
